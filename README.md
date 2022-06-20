@@ -7,6 +7,7 @@ https://packaging.python.org/en/latest/tutorials/packaging-projects/
 
 update the version in the setup.cfg
 
+open command prompt and navigate to viyapy directory
 py -m build
 
 This command should output a lot of text and once completed should generate two files in the dist directory:
