@@ -1,0 +1,10 @@
+LICENSE
+README.md
+pyproject.toml
+setup.cfg
+src/viyapy/__init__.py
+src/viyapy/viya_utils.py
+src/viyapy.egg-info/PKG-INFO
+src/viyapy.egg-info/SOURCES.txt
+src/viyapy.egg-info/dependency_links.txt
+src/viyapy.egg-info/top_level.txt
