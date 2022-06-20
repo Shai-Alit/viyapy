@@ -11,14 +11,20 @@ import json
 #Note - requires an admin to create a token for user
 def post(url1, contentType, accept, accessToken, body):
     sess = requests.Session()
+    
     headers = {"Accept": accept,
     "Authorization": "bearer " + accessToken,
     "Content-Type": contentType }
+    
     # Convert the request body to a JSON object.
     reqBody = json.loads(body)
+    
     # Post the request.
     req = sess.post(url1, json=reqBody, headers=headers)
+    
+    #clean up
     sess.close()
+    
     return req;
 
 #generate inputs in the format ID is expecting from a dictionary
@@ -48,10 +54,9 @@ def call_id_api(baseUrl, accessToken, feature_dict,moduleID):
     requestUrl = baseUrl + masModuleUrl + "/steps/execute"
     
     # Execute the decision.
-    print(requestBody)
     masExecutionResponse = post(requestUrl, contentType,
      acceptType, accessToken, requestBody)
-    # Display the response.
+    
     return json.loads(masExecutionResponse.content)
 
 #unpack the ID outputs section as a python dictionary
