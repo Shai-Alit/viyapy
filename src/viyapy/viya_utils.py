@@ -5,6 +5,7 @@ Created on Thu Jun  9 11:27:11 2022
 @author: seford
 """
 import requests
+import urllib
 import json
 
 #custom post that provides Viya authentication (OAuth2) with http request
@@ -26,6 +27,80 @@ def post(url1, contentType, accept, accessToken, body):
     sess.close()
     
     return req;
+
+
+# Define the GET function. This function defines request headers,
+# submits the request, and returns both the response body and
+# the response header.
+def get(url1, accessToken1, accept):
+    sess = requests.Session()
+    
+    headers = {"Accept": accept,
+    "Authorization": "bearer " + accessToken1}
+    try:
+        # Submit the request.
+        req = urllib.request.Request(url1, headers=headers)
+        
+        # Open the response, and convert it to a string.
+        
+        domainsResponse = urllib.request.urlopen(req)
+        body = domainsResponse.read()
+        
+        # Return the response body and the response headers.
+        respHeaders = domainsResponse.headers
+        
+        #clean up
+        sess.close()
+        
+        return body, respHeaders
+    except urllib.error.URLError as e:
+        if hasattr(e, 'reason'):
+            print ('Failed to reach a server.')
+            print ('Error: ', e.read())
+        elif hasattr(e, 'code'):
+            print ('The server could not fulfill the request.')
+            print ('Error: ', e.read())
+    except urllib.error.HTTPError as e:
+        print ('Error: ', e.read())
+    
+
+#function to get the decision content for a decision in Intelligent Decisioning
+def get_decision_content(baseUrl,decisionId,accessToken):
+    
+    #create the header
+    headers = {
+        'Accept': 'application/vnd.sas.decision+json',
+        "Authorization": "bearer " + accessToken
+        }
+    
+    #set up the URL
+    requestUrl = baseUrl + '/decisions/flows/' + decisionId
+    
+    #make the request
+    r = requests.get(requestUrl, headers = headers)
+    
+    #return the result as a dictionary
+    return r.json()
+
+#get all the models in a decision
+def get_models(baseUrl,decisionId,accessToken):
+    
+    #get the decision content
+    response = get_decision_content(baseUrl,decisionId,accessToken)
+    
+    #grab the flow setps
+    flow_steps = response['flow']['steps']
+    
+    models = []
+    
+    #loop through steps and capture any that are models
+    for s in flow_steps:
+        if s['type'] == 'application/vnd.sas.decision.step.model':
+            models.append({'Model Name': s['model']['name'],'Modified By':s['modifiedBy'],'Modified Timestamp':s['modifiedTimeStamp']})
+            
+    return models
+    
+  
 
 #generate inputs in the format ID is expecting from a dictionary
 def gen_viya_inputs(feature_dict):
