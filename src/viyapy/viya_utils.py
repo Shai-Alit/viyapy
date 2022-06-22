@@ -99,8 +99,6 @@ def get_models(baseUrl,decisionId,accessToken):
             models.append({'Model Name': s['model']['name'],'Modified By':s['modifiedBy'],'Modified Timestamp':s['modifiedTimeStamp']})
             
     return models
-    
-  
 
 #generate inputs in the format ID is expecting from a dictionary
 def gen_viya_inputs(feature_dict):
