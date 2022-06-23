@@ -1,22 +1,17 @@
 # viyapy
-Utilities for SAS Viya
 
-## Updating the package
+Author: Sean T Ford
+SAS Senior Solutions Architect
+Sean.Ford@sas.com
 
-https://packaging.python.org/en/latest/tutorials/packaging-projects/
+Utilities for accessing SAS Viya through the REST API.
 
-update the version in the setup.cfg
+Citations: 
+- SAS Institute Inc. 2020. SAS® Intelligent Decisioning: Decision Management REST API Examples. Cary, NC: SAS Institute Inc.
+- [SAS Developer](https://developer.sas.com/apis/rest/DecisionManagement/?python#get-decision-content)
 
-open command prompt and navigate to viyapy directory
-py -m build
 
-This command should output a lot of text and once completed should generate two files in the dist directory:
 
-dist/
-  example-package-YOUR-USERNAME-HERE-0.0.1-py3-none-any.whl
-  example-package-YOUR-USERNAME-HERE-0.0.1.tar.gz
-  
-  
-py -m twine upload dist/*
 
-You will be prompted for a username and password. For the username, use __token__. For the password, use the token value, including the pypi- prefix.
+
+
