@@ -8,9 +8,10 @@ import requests
 import urllib
 import json
 
-#custom post that provides Viya authentication (OAuth2) with http request
-#Note - requires an admin to create a token for user
-def post(url1, contentType, accept, accessToken, body):
+def post(url1: str, contentType: str, accept: str, accessToken: str, body: str) -> str:
+    '''custom post that provides Viya authentication (OAuth2) with http request
+    Note - requires an admin to create a token for user'''
+    
     sess = requests.Session()
     
     headers = {"Accept": accept,
@@ -28,11 +29,11 @@ def post(url1, contentType, accept, accessToken, body):
     
     return req;
 
-
-# Define the GET function. This function defines request headers,
-# submits the request, and returns both the response body and
-# the response header.
-def get(url1, accessToken1, accept):
+def get(url1: str, accessToken1: str, accept: str) -> str:
+    '''This function defines request headers,
+    submits the request, and returns both the response body and
+    the response header.
+    '''
     sess = requests.Session()
     
     headers = {"Accept": accept,
@@ -63,9 +64,8 @@ def get(url1, accessToken1, accept):
     except urllib.error.HTTPError as e:
         print ('Error: ', e.read())
     
-
-#function to get the decision content for a decision in Intelligent Decisioning
-def get_decision_content(baseUrl,decisionId,accessToken):
+def get_decision_content(baseUrl: str, decisionId: str, accessToken: str):
+    '''Get the content for a decision in Intelligent Decisioning'''
     
     #create the header
     headers = {
@@ -82,8 +82,8 @@ def get_decision_content(baseUrl,decisionId,accessToken):
     #return the result as a dictionary
     return r.json()
 
-#get all the models in a decision
-def get_models(baseUrl,decisionId,accessToken):
+def get_models(baseUrl: str, decisionId: str, accessToken: str):
+    '''get all the models in a decision'''
     
     #get the decision content
     response = get_decision_content(baseUrl,decisionId,accessToken)
@@ -100,8 +100,9 @@ def get_models(baseUrl,decisionId,accessToken):
             
     return models
 
-#generate inputs in the format ID is expecting from a dictionary
 def gen_viya_inputs(feature_dict):
+    '''generate a json style string with the inputs in the format ID is expecting from a dictionary'''
+    
     feature_list = []
     for k,v in feature_dict.items():
         if type(v) == str:
@@ -113,8 +114,9 @@ def gen_viya_inputs(feature_dict):
     
     return '{"inputs" : [' + feature_str + ']}'
 
-#call the ID API and get the results as a python dictionary
 def call_id_api(baseUrl, accessToken, feature_dict,moduleID):
+    '''call the ID API and get the results as a python dictionary'''
+    
     #create the request in format viya wants
     requestBody = gen_viya_inputs(feature_dict)
 
@@ -132,8 +134,9 @@ def call_id_api(baseUrl, accessToken, feature_dict,moduleID):
     
     return json.loads(masExecutionResponse.content)
 
-#unpack the ID outputs section as a python dictionary
 def unpack_viya_outputs(outputs):
+    '''unpack the ID outputs section as a python dictionary'''
+    
     d = {}
     for elem in outputs:
         d[elem['name']] = '' if 'value' not in elem.keys() else elem['value']
