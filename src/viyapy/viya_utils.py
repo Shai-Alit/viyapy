@@ -85,19 +85,32 @@ def get_decision_content(baseUrl,decisionId,accessToken):
 #get all the models in a decision
 def get_models(baseUrl,decisionId,accessToken):
     
+    models = []
+    
     #get the decision content
     response = get_decision_content(baseUrl,decisionId,accessToken)
     
-    #grab the flow setps
-    flow_steps = response['flow']['steps']
+    try:
+        if response['httpStatusCode'] == 400:
+            #grab the flow setps
+            flow_steps = response['flow']['steps']
+
+            #loop through steps and capture any that are models
+            for s in flow_steps:
+                if s['type'] == 'application/vnd.sas.decision.step.model':
+                    models.append({'Model Name': s['model']['name'],'Modified By':s['modifiedBy'],'Modified Timestamp':s['modifiedTimeStamp']})
+        else:
+               print ('Error')
+               print ('errorCode: ', response['errorCode']) 
+               print ('httpStatusCode: ', response['httpStatusCode']) 
+               print ('details: ', response['details']) 
+               print ('version: ', response['version']) 
     
-    models = []
+    except:
+        print ('unknown error in attempt to get decision content')
+        print ('URL: ', baseUrl)
+        print ('decisionId: ', decisionId)
     
-    #loop through steps and capture any that are models
-    for s in flow_steps:
-        if s['type'] == 'application/vnd.sas.decision.step.model':
-            models.append({'Model Name': s['model']['name'],'Modified By':s['modifiedBy'],'Modified Timestamp':s['modifiedTimeStamp']})
-            
     return models
 
 #generate inputs in the format ID is expecting from a dictionary
