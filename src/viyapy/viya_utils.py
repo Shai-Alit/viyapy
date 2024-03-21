@@ -146,10 +146,16 @@ def call_id_api(baseUrl, accessToken, feature_dict,moduleID):
     return json.loads(masExecutionResponse.content)
 
 #unpack the ID outputs section as a python dictionary
-def unpack_viya_outputs(outputs):
+def unpack_viya_outputs(response):
     d = {}
-    for elem in outputs:
-        d[elem['name']] = '' if 'value' not in elem.keys() else elem['value']
-        
+    
+    #check if 'outputs' in response
+    if 'outputs' in response.keys():
+        for elem in response['outputs']:
+            d[elem['name']] = '' if 'value' not in elem.keys() else elem['value']
+    else:
+        print('error: response does not have "outputs"')
+        print('response:')
+        print(response)
     return d
         
