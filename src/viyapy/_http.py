@@ -33,6 +33,7 @@ from .exceptions import (
     ViyaConnectionError,
     ViyaNotFoundError,
     ViyaRateLimitError,
+    ViyaResponseError,
     ViyaSecurityWarning,
     ViyaServerError,
     ViyaTimeoutError,
@@ -255,6 +256,24 @@ class HttpClient:
 
         self._raise_for_status(response, method, url)
         return response
+
+    def request_json(self, method: str, path: str, **kwargs: Any) -> Any:
+        """Issue a request and return the parsed JSON body.
+
+        Raises:
+            ViyaResponseError: The response was 2xx but its body was not JSON.
+            (plus everything :meth:`request` raises)
+        """
+        response = self.request(method, path, **kwargs)
+        try:
+            return response.json()
+        except ValueError as exc:
+            raise ViyaResponseError(
+                f"Expected a JSON response from {response.url} "
+                f"(Content-Type: {response.headers.get('Content-Type')!r})",
+                url=str(response.url),
+                response_body=response.text,
+            ) from exc
 
     def _url(self, path: str) -> str:
         return f"{self.base_url}/{path.lstrip('/')}"
