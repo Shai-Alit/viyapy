@@ -26,7 +26,9 @@ classifiers = [
     "Typing :: Typed",
 ]
 dependencies = [
-    "requests>=2.28",
+    # requests only permits urllib3>=2 from 2.30.0 onward.
+    "requests>=2.30",
+    "urllib3>=2.0",
 ]
 
 [project.urls]
@@ -93,6 +95,9 @@ select = [
 [tool.ruff.lint.per-file-ignores]
 "tests/**" = ["T20"]        # prints allowed in tests
 "noxfile.py" = ["T20"]
+# Legacy flat module: retained for backward compatibility and wrapped by the
+# deprecation shim in slice 1d. Exempt from lint until it is removed in v4.
+"src/viyapy/viya_utils.py" = ["ALL"]
 
 [tool.ruff.lint.isort]
 known-first-party = ["viyapy"]
@@ -112,6 +117,12 @@ files = ["src"]
 [[tool.mypy.overrides]]
 module = ["tests.*"]
 disallow_untyped_defs = false
+
+# Legacy flat module is untyped by design; it is replaced by the compat shim
+# in slice 1d. Exempt from strict typing until it is removed in v4.
+[[tool.mypy.overrides]]
+module = ["viyapy.viya_utils"]
+ignore_errors = true
 
 # ----------------------------------------------------------------------------
 # Pytest + coverage
