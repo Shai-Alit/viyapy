@@ -14,8 +14,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Version/dialect layer (`viyapy.dialects`) localizing SAS Viya 3.5 vs Viya 4
   differences — endpoint paths, media types, and the MAS `output` vs `outputs`
   response shape — behind a single `Dialect` interface resolved via
-  `dialects.resolve("3.5" | "4")`. A missing output list now raises
-  `ViyaResponseError` with the raw body attached.
+  `dialects.resolve("3.5")` or `dialects.resolve("4")`. A missing output list
+  now raises `ViyaResponseError` with the raw body attached.
 
 
 - Typed exception hierarchy (`ViyaError` and subclasses) carrying HTTP status,
