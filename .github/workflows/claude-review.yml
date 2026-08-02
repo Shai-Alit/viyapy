@@ -1,0 +1,60 @@
+name: Claude Review
+
+# Independent AI review of every PR. Comment-only for now (not a required
+# check) so we can tune signal-to-noise before making it blocking.
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+
+# Cancel superseded runs when a PR gets new commits.
+concurrency:
+  group: claude-review-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  review:
+    # Skip drafts and Dependabot noise.
+    if: github.event.pull_request.draft == false && github.actor != 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+      id-token: write
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 1
+
+      - uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          prompt: |
+            REPO: ${{ github.repository }}
+            PR NUMBER: ${{ github.event.pull_request.number }}
+
+            You are an independent reviewer for `viyapy`, a Python client library
+            for SAS Viya Intelligent Decisioning that must support BOTH Viya 3.5
+            and Viya 4 (LTS + Stable). Review this PR as a senior Python library
+            maintainer. The design intent is captured in PRODUCTION_PLAN.md — check
+            changes against it. The PR branch is already checked out.
+
+            Focus, in priority order:
+            - Correctness & error handling: no bare/blind `except`, no `print` in
+              library code, no returning None to signal failure, every HTTP call
+              has a timeout. Failures should raise typed `ViyaError` subclasses.
+            - Public API quality: full type hints (mypy --strict), docstrings on
+              public API, no leaking of secrets/tokens in logs or `__repr__`.
+            - Viya version handling: 3.5 vs 4 differences belong in the dialect
+              layer, not scattered `if version ==` branches; watch for the
+              `output` vs `outputs` response-shape pitfall.
+            - Tests: new/changed logic has unit tests with mocked HTTP (no network),
+              error branches covered; fixtures exist per Viya generation.
+            - Security & packaging hygiene; docs/CHANGELOG updated when relevant.
+
+            Be specific and concise. Use inline comments for line-specific issues
+            and a single summary comment with an overall assessment. Rate blocking
+            issues clearly. Only post GitHub comments — do not submit review text
+            as chat messages. If the PR looks good, say so briefly.
+
+          claude_args: |
+            --allowedTools "mcp__github_inline_comment__create_inline_comment,Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr view:*)"
