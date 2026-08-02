@@ -36,6 +36,20 @@ def test_masks_bearer_in_dict_args() -> None:
     assert "HUNTER2" not in record.getMessage()
 
 
+def test_masks_bearer_in_nested_mapping_arg() -> None:
+    record = _record("headers=%s", ({"Authorization": "Bearer deep-secret"},))
+    RedactingFilter().filter(record)
+    assert "deep-secret" not in record.getMessage()
+
+
+def test_masks_bearer_in_nested_sequence_arg() -> None:
+    record = _record("items=%s", (["Bearer a", ["Bearer b"]],))
+    RedactingFilter().filter(record)
+    message = record.getMessage()
+    assert "Bearer a" not in message
+    assert "Bearer b" not in message
+
+
 def test_leaves_non_token_text_untouched() -> None:
     record = _record("plain message with no secrets")
     RedactingFilter().filter(record)

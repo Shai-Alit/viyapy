@@ -35,6 +35,8 @@ class ViyaAPIError(ViyaError):
         status_code: HTTP status code of the response.
         viya_error_code: SAS error code from the response envelope, if present.
         details: Detail strings from the response envelope (may be empty).
+        remediation: SAS remediation hint from the response envelope, if present
+            — usually the most actionable part of the error.
         correlation_id: Request correlation/trace id from the response headers.
         url: The request URL.
         method: The HTTP method.
@@ -48,6 +50,7 @@ class ViyaAPIError(ViyaError):
         status_code: int | None = None,
         viya_error_code: int | str | None = None,
         details: list[str] | None = None,
+        remediation: str | None = None,
         correlation_id: str | None = None,
         url: str | None = None,
         method: str | None = None,
@@ -58,6 +61,7 @@ class ViyaAPIError(ViyaError):
         self.status_code = status_code
         self.viya_error_code = viya_error_code
         self.details: list[str] = details or []
+        self.remediation = remediation
         self.correlation_id = correlation_id
         self.url = url
         self.method = method
@@ -112,3 +116,14 @@ class ViyaResponseError(ViyaError):
         self.message = message
         self.url = url
         self.response_body = response_body
+
+
+class ViyaSecurityWarning(UserWarning):
+    """Warning for security-relevant configuration.
+
+    Emitted for choices that weaken transport security — for example disabling
+    TLS verification or using an ``http://`` base URL that sends the bearer token
+    in cleartext. Because it is a distinct category, deployments can filter or
+    escalate it precisely (e.g. ``-W error::viyapy.ViyaSecurityWarning``) rather
+    than matching on message text.
+    """
