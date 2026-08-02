@@ -1,0 +1,10 @@
+{
+  "moduleId": "api_tester1_0",
+  "stepId": "execute",
+  "executionState": "completed",
+  "outputs": [
+    { "name": "input_string", "value": "this is a test" },
+    { "name": "output_string", "value": "successfully ran decision flow" }
+  ],
+  "version": 2
+}
