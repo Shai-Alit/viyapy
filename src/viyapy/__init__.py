@@ -23,6 +23,7 @@ from .exceptions import (
     ViyaNotFoundError,
     ViyaRateLimitError,
     ViyaResponseError,
+    ViyaSecurityWarning,
     ViyaServerError,
     ViyaTimeoutError,
 )
@@ -49,6 +50,7 @@ __all__ = [
     "ViyaNotFoundError",
     "ViyaRateLimitError",
     "ViyaResponseError",
+    "ViyaSecurityWarning",
     "ViyaServerError",
     "ViyaTimeoutError",
     "__version__",

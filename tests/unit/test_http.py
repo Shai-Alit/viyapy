@@ -2,15 +2,19 @@
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from unittest import mock
 
 import pytest
 import requests
 import responses
+import urllib3
 
 from viyapy._http import (
+    DEFAULT_MAX_RETRY_AFTER,
     DEFAULT_TIMEOUT,
     HttpClient,
+    _BoundedRetry,
     _correlation_id,
     _parse_error_envelope,
     _retry_after,
@@ -22,6 +26,7 @@ from viyapy.exceptions import (
     ViyaConnectionError,
     ViyaNotFoundError,
     ViyaRateLimitError,
+    ViyaSecurityWarning,
     ViyaServerError,
     ViyaTimeoutError,
 )
@@ -62,7 +67,7 @@ def test_non_absolute_http_url_raises_config_error(bad: str) -> None:
 
 
 def test_http_scheme_warns_about_cleartext() -> None:
-    with pytest.warns(UserWarning, match="cleartext"):
+    with pytest.warns(ViyaSecurityWarning, match="cleartext"):
         HttpClient("http://viya.example.com", "tok", max_retries=0)
 
 
@@ -77,13 +82,19 @@ def test_token_is_stripped() -> None:
     assert client._token == "tok-with-newline"
 
 
-def test_timeout_none_raises_config_error() -> None:
+@pytest.mark.parametrize("bad", [None, 0, -1, (0, 30), (5, -1), (5,), "30", True])
+def test_invalid_timeout_raises_config_error(bad: object) -> None:
     with pytest.raises(ViyaConfigError):
-        HttpClient(BASE, "tok", timeout=None)  # type: ignore[arg-type]
+        HttpClient(BASE, "tok", timeout=bad)  # type: ignore[arg-type]
+
+
+def test_negative_max_retries_raises_config_error() -> None:
+    with pytest.raises(ViyaConfigError):
+        HttpClient(BASE, "tok", max_retries=-1)
 
 
 def test_verify_false_warns() -> None:
-    with pytest.warns(UserWarning, match="TLS verification is disabled"):
+    with pytest.warns(ViyaSecurityWarning, match="TLS verification is disabled"):
         HttpClient(BASE, "tok", verify=False, max_retries=0)
 
 
@@ -168,6 +179,29 @@ def test_generic_request_exception_translates() -> None:
     responses.add(responses.GET, f"{BASE}/x", body=requests.exceptions.RequestException("boom"))
     with pytest.raises(ViyaConnectionError):
         make_client().request("GET", "/x")
+
+
+def test_non_serializable_json_body_raises_config_error() -> None:
+    # requests serializes json= internally; a datetime raises TypeError there.
+    with pytest.raises(ViyaConfigError):
+        make_client().request(
+            "POST",
+            "/exec",
+            content_type="application/json",
+            json_body={"when": datetime.now(timezone.utc)},
+        )
+
+
+def test_urllib3_httperror_translates_to_connection_error() -> None:
+    session = mock.Mock(spec=requests.Session)
+    session.request.side_effect = urllib3.exceptions.InvalidHeader("bad Retry-After")
+    with pytest.raises(ViyaConnectionError):
+        HttpClient(BASE, "tok", session=session).request("GET", "/x")
+
+
+def test_per_call_invalid_timeout_raises_config_error() -> None:
+    with pytest.raises(ViyaConfigError):
+        make_client().request("GET", "/ping", timeout=-1)
 
 
 # -- HTTP status translation ------------------------------------------------
@@ -291,30 +325,64 @@ def test_context_manager_closes_session() -> None:
 # -- helpers ----------------------------------------------------------------
 
 
-def test_parse_error_envelope_nested_form() -> None:
+def test_parse_error_envelope_nested_error_form() -> None:
     body = {"error": {"message": "invalid", "errorCode": 7, "details": "one detail"}}
-    message, code, details = _parse_error_envelope(body, default="fallback")
-    assert (message, code, details) == ("invalid", 7, ["one detail"])
+    assert _parse_error_envelope(body, default="fallback") == ("invalid", 7, ["one detail"], None)
+
+
+def test_parse_error_envelope_plural_errors_form_and_remediation() -> None:
+    body = {"errors": [{"message": "bad rule", "errorCode": 9, "remediation": "fix the term"}]}
+    message, code, _details, remediation = _parse_error_envelope(body, default="fallback")
+    assert (message, code, remediation) == ("bad rule", 9, "fix the term")
 
 
 def test_parse_error_envelope_non_mapping_uses_default() -> None:
-    assert _parse_error_envelope("plain text error", default="fallback") == ("fallback", None, [])
+    assert _parse_error_envelope("plain text", default="fallback") == ("fallback", None, [], None)
 
 
-@pytest.mark.parametrize(("headers", "expected"), [({"Retry-After": "5"}, 5.0), ({}, None)])
-def test_retry_after_numeric_and_absent(headers: dict[str, str], expected: float | None) -> None:
-    assert _retry_after(headers) == expected
+@responses.activate
+def test_remediation_surfaces_on_exception() -> None:
+    responses.add(
+        responses.GET,
+        f"{BASE}/r",
+        json={"message": "nope", "remediation": "grant the scope"},
+        status=403,
+    )
+    with pytest.raises(ViyaAuthError) as info:
+        make_client().request("GET", "/r")
+    assert info.value.remediation == "grant the scope"
 
 
-def test_retry_after_http_date_form_returns_non_negative() -> None:
-    # A past date should clamp to 0.0 rather than go negative.
-    result = _retry_after({"Retry-After": "Wed, 21 Oct 2015 07:28:00 GMT"})
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    [("5", 5.0), ("-5", 0.0), ("nan", None), ("inf", None), ("not-a-date", None)],
+)
+def test_retry_after_delta_seconds_forms(value: str, expected: float | None) -> None:
+    assert _retry_after({"Retry-After": value}) == expected
+
+
+def test_retry_after_absent_is_none() -> None:
+    assert _retry_after({}) is None
+
+
+def test_retry_after_http_date_form_clamps_non_negative() -> None:
+    result = _retry_after({"Retry-After": "Wed, 21 Oct 2015 07:28:00 GMT"})  # a past date
     assert result is not None
     assert result >= 0.0
 
 
-def test_retry_after_unparseable_is_none() -> None:
-    assert _retry_after({"Retry-After": "not-a-date"}) is None
+def test_bounded_retry_caps_server_retry_after() -> None:
+    retry = _BoundedRetry(total=1, respect_retry_after_header=True)
+    response = mock.Mock()
+    response.headers = {"Retry-After": "3600"}
+    assert retry.get_retry_after(response) == DEFAULT_MAX_RETRY_AFTER
+
+
+def test_bounded_retry_passes_through_absent_retry_after() -> None:
+    retry = _BoundedRetry(total=1, respect_retry_after_header=True)
+    response = mock.Mock()
+    response.headers = {}
+    assert retry.get_retry_after(response) is None
 
 
 def test_correlation_id_absent_is_none() -> None:

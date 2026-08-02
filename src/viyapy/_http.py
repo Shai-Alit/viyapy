@@ -1,8 +1,8 @@
 """Internal HTTP layer.
 
 One :class:`requests.Session` per client, mandatory connect/read timeouts,
-retries with exponential backoff + jitter (honoring ``Retry-After``), and
-translation of transport/HTTP failures into the typed
+retries with exponential backoff + jitter (honoring a bounded ``Retry-After``),
+and translation of transport/HTTP failures into the typed
 :mod:`viyapy.exceptions` hierarchy.
 
 This module is private; public access is through :class:`viyapy.ViyaClient`
@@ -12,6 +12,7 @@ This module is private; public access is through :class:`viyapy.ViyaClient`
 from __future__ import annotations
 
 import logging
+import math
 import warnings
 from collections.abc import Mapping
 from datetime import datetime, timezone
@@ -21,6 +22,7 @@ from typing import Any
 from urllib.parse import urlparse
 
 import requests
+import urllib3
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
@@ -31,6 +33,7 @@ from .exceptions import (
     ViyaConnectionError,
     ViyaNotFoundError,
     ViyaRateLimitError,
+    ViyaSecurityWarning,
     ViyaServerError,
     ViyaTimeoutError,
 )
@@ -43,14 +46,29 @@ DEFAULT_TIMEOUT: float | tuple[float, float] = (5.0, 30.0)
 DEFAULT_MAX_RETRIES = 3
 DEFAULT_BACKOFF_FACTOR = 0.5
 DEFAULT_BACKOFF_JITTER = 0.3
+# Cap on how long a server-supplied Retry-After may make us sleep (seconds).
+DEFAULT_MAX_RETRY_AFTER = 120.0
 _RETRY_STATUS = (429, 500, 502, 503, 504)
 _IDEMPOTENT_METHODS = frozenset({"GET", "HEAD", "OPTIONS", "PUT", "DELETE"})
-_CORRELATION_HEADERS = (
-    "X-Correlation-Id",
-    "X-SAS-Correlator",
-    "X-Request-Id",
-    "correlationId",
-)
+_CORRELATION_HEADERS = ("X-Correlation-Id", "X-SAS-Correlator", "X-Request-Id")
+
+
+class _BoundedRetry(Retry):
+    """Retry that clamps a server-supplied ``Retry-After`` to a maximum sleep.
+
+    ``Retry.backoff_max`` only bounds the computed exponential backoff, not the
+    ``Retry-After`` header. Without this, a gateway answering 429 with
+    ``Retry-After: 3600`` would block the calling thread for an hour. The real
+    value is still surfaced to callers via ``ViyaRateLimitError.retry_after``.
+    """
+
+    max_retry_after: float = DEFAULT_MAX_RETRY_AFTER
+
+    def get_retry_after(self, response: Any) -> float | None:
+        retry_after = super().get_retry_after(response)
+        if retry_after is None:
+            return None
+        return min(retry_after, self.max_retry_after)
 
 
 class HttpClient:
@@ -61,18 +79,22 @@ class HttpClient:
             ``https://viya.example.com``. Must include an ``http``/``https``
             scheme and a host.
         token: OAuth2 bearer token. Surrounding whitespace is stripped.
-        timeout: ``(connect, read)`` seconds, or a single float applied to both.
-            Must not be ``None`` (that would block forever).
+        timeout: ``(connect, read)`` seconds, or a single positive float applied
+            to both. Must not be ``None`` (that would block forever).
         verify: TLS verification — ``True``, ``False``, or a CA-bundle path.
-            ``False`` emits a warning.
+            ``False`` emits a :class:`ViyaSecurityWarning`.
         max_retries: Retry budget for transient failures (connection, 429, 5xx).
+            Must be ``>= 0``.
         retry_on_post: Whether POSTs may be retried. Off by default because MAS
             execution is not assumed idempotent.
         user_agent: ``User-Agent`` header; defaults to ``viyapy/<version>``.
-        session: Inject a pre-built session (mainly for testing).
+        session: Inject a pre-built session (mainly for testing). When provided,
+            it is used as-is: ``max_retries`` and ``retry_on_post`` are ignored,
+            because the injected session keeps whatever adapters it already has.
 
     Raises:
-        ViyaConfigError: If ``base_url``, ``token``, or ``timeout`` is invalid.
+        ViyaConfigError: If ``base_url``, ``token``, ``timeout``, or
+            ``max_retries`` is invalid.
     """
 
     def __init__(
@@ -100,6 +122,7 @@ class HttpClient:
             warnings.warn(
                 "base_url uses http://; the bearer token will be sent in cleartext. "
                 "Use https:// in production.",
+                ViyaSecurityWarning,
                 stacklevel=2,
             )
 
@@ -107,16 +130,16 @@ class HttpClient:
         if not cleaned_token:
             raise ViyaConfigError("token must be a non-empty string")
 
-        if timeout is None:
-            raise ViyaConfigError(
-                "timeout must not be None (that would block forever); "
-                "pass a float or a (connect, read) tuple"
-            )
+        _validate_timeout(timeout)
+
+        if max_retries < 0:
+            raise ViyaConfigError(f"max_retries must be >= 0 (got {max_retries})")
 
         if verify is False:
             warnings.warn(
                 "TLS verification is disabled; traffic (including the bearer token) is "
                 "not protected against interception. Supply a CA-bundle path instead.",
+                ViyaSecurityWarning,
                 stacklevel=2,
             )
 
@@ -137,7 +160,7 @@ class HttpClient:
         if self._retry_on_post:
             methods.add("POST")
         forcelist = _RETRY_STATUS if self._max_retries > 0 else ()
-        retry = Retry(
+        retry = _BoundedRetry(
             total=self._max_retries,
             connect=self._max_retries,
             read=self._max_retries,
@@ -183,6 +206,8 @@ class HttpClient:
             The successful :class:`requests.Response` (2xx).
 
         Raises:
+            ViyaConfigError: The request could not be built (e.g. a non-JSON
+                ``json_body`` or an invalid per-call timeout).
             ViyaTimeoutError: The connect or read timeout was exceeded.
             ViyaConnectionError: The server could not be reached.
             ViyaAuthError: Authentication/authorization failed (401/403).
@@ -191,6 +216,8 @@ class HttpClient:
             ViyaServerError: SAS Viya returned a 5xx error.
             ViyaAPIError: Any other non-2xx response.
         """
+        if timeout is not None:
+            _validate_timeout(timeout)
         url = self._url(path)
         headers = {
             "Authorization": f"Bearer {self._token}",
@@ -218,6 +245,13 @@ class HttpClient:
             raise ViyaConnectionError(f"Could not connect to {url}") from exc
         except requests.exceptions.RequestException as exc:
             raise ViyaConnectionError(f"Request to {url} failed: {exc}") from exc
+        except (TypeError, ValueError) as exc:
+            # e.g. a non-JSON-serializable json_body raises TypeError inside requests.
+            raise ViyaConfigError(f"Invalid request to {url}: {exc}") from exc
+        except urllib3.exceptions.HTTPError as exc:
+            # urllib3 errors raised outside the adapter's translation (e.g. an
+            # unparseable Retry-After during the retry sleep) surface here.
+            raise ViyaConnectionError(f"Request to {url} failed: {exc}") from exc
 
         self._raise_for_status(response, method, url)
         return response
@@ -234,13 +268,14 @@ class HttpClient:
         except ValueError:
             body = response.text
 
-        message, viya_code, details = _parse_error_envelope(
+        message, viya_code, details, remediation = _parse_error_envelope(
             body, default=response.reason or "SAS Viya API error"
         )
         context: dict[str, Any] = {
             "status_code": response.status_code,
             "viya_error_code": viya_code,
             "details": details,
+            "remediation": remediation,
             "correlation_id": _correlation_id(response.headers),
             "url": url,
             "method": method,
@@ -275,6 +310,29 @@ class HttpClient:
         )
 
 
+def _validate_timeout(timeout: object) -> None:
+    if timeout is None:
+        raise ViyaConfigError(
+            "timeout must not be None (that would block forever); "
+            "pass a positive float or a (connect, read) tuple"
+        )
+    if isinstance(timeout, bool):
+        raise ViyaConfigError("timeout must be a number, not a bool")
+    if isinstance(timeout, (int, float)):
+        if timeout <= 0:
+            raise ViyaConfigError("timeout must be a positive number of seconds")
+        return
+    if (
+        isinstance(timeout, tuple)
+        and len(timeout) == 2
+        and all(isinstance(t, (int, float)) and not isinstance(t, bool) and t > 0 for t in timeout)
+    ):
+        return
+    raise ViyaConfigError(
+        "timeout must be a positive number or a (connect, read) tuple of positive numbers"
+    )
+
+
 def _default_user_agent() -> str:
     try:
         return f"viyapy/{version('viyapy')}"
@@ -282,17 +340,26 @@ def _default_user_agent() -> str:
         return "viyapy"
 
 
-def _parse_error_envelope(body: Any, default: str) -> tuple[str, int | str | None, list[str]]:
-    """Extract ``(message, errorCode, details)`` from a Viya error body.
+def _parse_error_envelope(
+    body: Any, default: str
+) -> tuple[str, int | str | None, list[str], str | None]:
+    """Extract ``(message, errorCode, details, remediation)`` from a Viya error body.
 
-    Handles both the top-level envelope and the nested ``{"error": {...}}``
-    form used by validation endpoints.
+    Handles the top-level envelope, the nested ``{"error": {...}}`` form used by
+    Spring/gateway responses, and the ``{"errors": [{...}]}`` form returned by
+    Intelligent Decisioning validation endpoints.
     """
     if isinstance(body, Mapping):
+        env: Mapping[str, Any] = body
         nested = body.get("error")
-        env: Mapping[str, Any] = nested if isinstance(nested, Mapping) else body
+        errors = body.get("errors")
+        if isinstance(nested, Mapping):
+            env = nested
+        elif isinstance(errors, list) and errors and isinstance(errors[0], Mapping):
+            env = errors[0]
         message = env.get("message") or default
         code = env.get("errorCode")
+        remediation = env.get("remediation")
         raw_details = env.get("details")
         if isinstance(raw_details, str):
             details = [raw_details]
@@ -300,8 +367,8 @@ def _parse_error_envelope(body: Any, default: str) -> tuple[str, int | str | Non
             details = [str(d) for d in raw_details]
         else:
             details = []
-        return str(message), code, details
-    return default, None, []
+        return str(message), code, details, (str(remediation) if remediation else None)
+    return default, None, [], None
 
 
 def _correlation_id(headers: Mapping[str, str]) -> str | None:
@@ -312,18 +379,22 @@ def _correlation_id(headers: Mapping[str, str]) -> str | None:
 
 
 def _retry_after(headers: Mapping[str, str]) -> float | None:
-    """Parse a ``Retry-After`` header as seconds.
+    """Parse a ``Retry-After`` header into a non-negative, finite number of seconds.
 
     Supports both the delta-seconds form (``"7"``) and the RFC 9110 HTTP-date
-    form (``"Wed, 21 Oct 2015 07:28:00 GMT"``), which SAS gateways may emit.
+    form (``"Wed, 21 Oct 2015 07:28:00 GMT"``). Negative values are clamped to
+    ``0.0`` and non-finite values (``nan``/``inf``) are rejected, so the result
+    is always safe to pass to ``time.sleep``.
     """
     value = headers.get("Retry-After")
     if value is None:
         return None
     try:
-        return float(value)
+        seconds = float(value)
     except (TypeError, ValueError):
         pass
+    else:
+        return max(0.0, seconds) if math.isfinite(seconds) else None
     try:
         when = parsedate_to_datetime(value)
     except (TypeError, ValueError):
