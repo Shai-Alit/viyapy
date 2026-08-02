@@ -1,0 +1,35 @@
+# CodeRabbit configuration — https://docs.coderabbit.ai/reference/configuration
+# Second, model-independent AI reviewer alongside the Claude action.
+language: en-US
+early_access: false
+
+reviews:
+  # "chill" = fewer, higher-signal comments while we tune noise.
+  profile: chill
+  request_changes_workflow: false   # comment-only for now; not a blocking gate
+  high_level_summary: true
+  poem: false
+  review_status: true
+  auto_review:
+    enabled: true
+    drafts: false
+    base_branches:
+      - main
+  # Let language tools run as part of review.
+  tools:
+    ruff:
+      enabled: true
+  path_instructions:
+    - path: "src/viyapy/**"
+      instructions: >-
+        Library code. Enforce: full type hints, no bare/blind except, no `print`
+        (use logging), no returning None to signal errors, every HTTP call has a
+        timeout, and no secrets/tokens in logs or __repr__. Viya 3.5 vs 4
+        differences must live in the dialect layer, not inline version checks.
+    - path: "tests/**"
+      instructions: >-
+        Tests must not hit the network (mock HTTP). Expect error-branch coverage
+        and per-Viya-generation fixtures.
+
+chat:
+  auto_reply: true
