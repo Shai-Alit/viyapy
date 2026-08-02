@@ -12,5 +12,5 @@ class Viya35Dialect(Dialect):
     ``outputs`` fallback keeps async/timeout responses working too).
     """
 
-    name = "viya3.5"
-    outputs_keys = ("output", "outputs")
+    name: str = "viya3.5"
+    outputs_keys: tuple[str, ...] = ("output", "outputs")

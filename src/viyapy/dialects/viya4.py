@@ -11,5 +11,5 @@ class Viya4Dialect(Dialect):
     Viya 4 synchronous MAS execution returns results under ``outputs``.
     """
 
-    name = "viya4"
-    outputs_keys = ("outputs", "output")
+    name: str = "viya4"
+    outputs_keys: tuple[str, ...] = ("outputs", "output")
