@@ -35,3 +35,9 @@ def test_exception_names_are_exported() -> None:
         "ViyaResponseError",
     ]:
         assert name in viyapy.__all__
+
+
+def test_model_names_are_exported() -> None:
+    for name in ["Decision", "ModelStep", "ExecutionResult"]:
+        assert name in viyapy.__all__
+        assert hasattr(viyapy, name)
