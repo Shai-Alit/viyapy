@@ -12,8 +12,13 @@ This module is private; public access is through :class:`viyapy.ViyaClient`
 from __future__ import annotations
 
 import logging
+import warnings
 from collections.abc import Mapping
+from datetime import datetime, timezone
+from email.utils import parsedate_to_datetime
+from importlib.metadata import PackageNotFoundError, version
 from typing import Any
+from urllib.parse import urlparse
 
 import requests
 from requests.adapters import HTTPAdapter
@@ -30,7 +35,7 @@ from .exceptions import (
     ViyaTimeoutError,
 )
 
-logger = logging.getLogger("viyapy")
+logger = logging.getLogger(__name__)
 
 # Timeout is (connect, read) seconds, or a single float applied to both.
 # No request is ever issued without a timeout.
@@ -52,15 +57,22 @@ class HttpClient:
     """Thin, hardened wrapper over a :class:`requests.Session`.
 
     Args:
-        base_url: Root URL of the Viya deployment, e.g. ``https://viya.example.com``.
-        token: OAuth2 bearer token.
+        base_url: Absolute root URL of the Viya deployment, e.g.
+            ``https://viya.example.com``. Must include an ``http``/``https``
+            scheme and a host.
+        token: OAuth2 bearer token. Surrounding whitespace is stripped.
         timeout: ``(connect, read)`` seconds, or a single float applied to both.
+            Must not be ``None`` (that would block forever).
         verify: TLS verification — ``True``, ``False``, or a CA-bundle path.
+            ``False`` emits a warning.
         max_retries: Retry budget for transient failures (connection, 429, 5xx).
         retry_on_post: Whether POSTs may be retried. Off by default because MAS
             execution is not assumed idempotent.
-        user_agent: Optional ``User-Agent`` string for server-side traceability.
+        user_agent: ``User-Agent`` header; defaults to ``viyapy/<version>``.
         session: Inject a pre-built session (mainly for testing).
+
+    Raises:
+        ViyaConfigError: If ``base_url``, ``token``, or ``timeout`` is invalid.
     """
 
     def __init__(
@@ -75,18 +87,46 @@ class HttpClient:
         user_agent: str | None = None,
         session: requests.Session | None = None,
     ) -> None:
-        if not base_url or not str(base_url).strip():
+        cleaned_url = str(base_url).strip() if base_url is not None else ""
+        if not cleaned_url:
             raise ViyaConfigError("base_url must be a non-empty string")
-        if not token or not str(token).strip():
+        parsed = urlparse(cleaned_url)
+        if parsed.scheme not in ("http", "https") or not parsed.netloc:
+            raise ViyaConfigError(
+                "base_url must be an absolute http(s) URL, "
+                f"e.g. https://viya.example.com (got {base_url!r})"
+            )
+        if parsed.scheme == "http":
+            warnings.warn(
+                "base_url uses http://; the bearer token will be sent in cleartext. "
+                "Use https:// in production.",
+                stacklevel=2,
+            )
+
+        cleaned_token = str(token).strip() if token is not None else ""
+        if not cleaned_token:
             raise ViyaConfigError("token must be a non-empty string")
 
-        self.base_url = str(base_url).strip().rstrip("/")
-        self._token = str(token)
+        if timeout is None:
+            raise ViyaConfigError(
+                "timeout must not be None (that would block forever); "
+                "pass a float or a (connect, read) tuple"
+            )
+
+        if verify is False:
+            warnings.warn(
+                "TLS verification is disabled; traffic (including the bearer token) is "
+                "not protected against interception. Supply a CA-bundle path instead.",
+                stacklevel=2,
+            )
+
+        self.base_url = cleaned_url.rstrip("/")
+        self._token = cleaned_token
         self.timeout = timeout
         self.verify = verify
         self._max_retries = max_retries
         self._retry_on_post = retry_on_post
-        self._user_agent = user_agent
+        self._user_agent = user_agent or _default_user_agent()
         self._session = session or self._build_session()
 
     # -- session / retry configuration --------------------------------------
@@ -97,22 +137,18 @@ class HttpClient:
         if self._retry_on_post:
             methods.add("POST")
         forcelist = _RETRY_STATUS if self._max_retries > 0 else ()
-        retry_kwargs: dict[str, Any] = {
-            "total": self._max_retries,
-            "connect": self._max_retries,
-            "read": self._max_retries,
-            "status": self._max_retries,
-            "backoff_factor": DEFAULT_BACKOFF_FACTOR,
-            "status_forcelist": forcelist,
-            "allowed_methods": frozenset(methods),
-            "respect_retry_after_header": True,
-            "raise_on_status": False,
-        }
-        try:
-            retry = Retry(**retry_kwargs, backoff_jitter=DEFAULT_BACKOFF_JITTER)
-        except TypeError:
-            # urllib3 < 2.0 has no backoff_jitter parameter.
-            retry = Retry(**retry_kwargs)
+        retry = Retry(
+            total=self._max_retries,
+            connect=self._max_retries,
+            read=self._max_retries,
+            status=self._max_retries,
+            backoff_factor=DEFAULT_BACKOFF_FACTOR,
+            backoff_jitter=DEFAULT_BACKOFF_JITTER,
+            status_forcelist=forcelist,
+            allowed_methods=frozenset(methods),
+            respect_retry_after_header=True,
+            raise_on_status=False,
+        )
         adapter = HTTPAdapter(max_retries=retry)
         session.mount("https://", adapter)
         session.mount("http://", adapter)
@@ -129,14 +165,41 @@ class HttpClient:
         content_type: str | None = None,
         json_body: Any = None,
         params: Mapping[str, Any] | None = None,
+        timeout: float | tuple[float, float] | None = None,
     ) -> requests.Response:
-        """Issue a request and return the raw response, raising on failure."""
+        """Issue an authenticated request and return the raw response.
+
+        Args:
+            method: HTTP method, e.g. ``"GET"`` or ``"POST"``.
+            path: Path relative to ``base_url`` (leading slash optional).
+            accept: ``Accept`` header value.
+            content_type: ``Content-Type`` header; set when sending ``json_body``.
+            json_body: Object serialized to a JSON request body.
+            params: Query-string parameters.
+            timeout: Per-call override of the client timeout; ``None`` uses the
+                client default.
+
+        Returns:
+            The successful :class:`requests.Response` (2xx).
+
+        Raises:
+            ViyaTimeoutError: The connect or read timeout was exceeded.
+            ViyaConnectionError: The server could not be reached.
+            ViyaAuthError: Authentication/authorization failed (401/403).
+            ViyaNotFoundError: The resource does not exist (404).
+            ViyaRateLimitError: The client is being rate limited (429).
+            ViyaServerError: SAS Viya returned a 5xx error.
+            ViyaAPIError: Any other non-2xx response.
+        """
         url = self._url(path)
-        headers = {"Authorization": f"Bearer {self._token}", "Accept": accept}
+        headers = {
+            "Authorization": f"Bearer {self._token}",
+            "Accept": accept,
+            "User-Agent": self._user_agent,
+        }
         if json_body is not None and content_type:
             headers["Content-Type"] = content_type
-        if self._user_agent:
-            headers["User-Agent"] = self._user_agent
+        effective_timeout = self.timeout if timeout is None else timeout
 
         logger.debug("Viya request: %s %s", method, url)
         try:
@@ -146,7 +209,7 @@ class HttpClient:
                 json=json_body,
                 params=dict(params) if params else None,
                 headers=headers,
-                timeout=self.timeout,
+                timeout=effective_timeout,
                 verify=self.verify,
             )
         except requests.exceptions.Timeout as exc:
@@ -212,6 +275,13 @@ class HttpClient:
         )
 
 
+def _default_user_agent() -> str:
+    try:
+        return f"viyapy/{version('viyapy')}"
+    except PackageNotFoundError:  # pragma: no cover - only when uninstalled
+        return "viyapy"
+
+
 def _parse_error_envelope(body: Any, default: str) -> tuple[str, int | str | None, list[str]]:
     """Extract ``(message, errorCode, details)`` from a Viya error body.
 
@@ -242,11 +312,24 @@ def _correlation_id(headers: Mapping[str, str]) -> str | None:
 
 
 def _retry_after(headers: Mapping[str, str]) -> float | None:
+    """Parse a ``Retry-After`` header as seconds.
+
+    Supports both the delta-seconds form (``"7"``) and the RFC 9110 HTTP-date
+    form (``"Wed, 21 Oct 2015 07:28:00 GMT"``), which SAS gateways may emit.
+    """
     value = headers.get("Retry-After")
     if value is None:
         return None
     try:
         return float(value)
     except (TypeError, ValueError):
-        # HTTP-date form is not parsed here; urllib3 still honors it for retries.
+        pass
+    try:
+        when = parsedate_to_datetime(value)
+    except (TypeError, ValueError):
         return None
+    if when is None:  # pragma: no cover - defensive; older stdlib could return None
+        return None
+    if when.tzinfo is None:
+        when = when.replace(tzinfo=timezone.utc)
+    return max(0.0, (when - datetime.now(timezone.utc)).total_seconds())
