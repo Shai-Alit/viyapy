@@ -1,0 +1,18 @@
+{
+  "id": "def-456-decision",
+  "name": "Legacy Credit Decision",
+  "flow": {
+    "steps": [
+      {
+        "type": "application/vnd.sas.decision.step.model",
+        "model": { "name": "Legacy Scoring Model" },
+        "modifiedBy": "seford",
+        "modifiedTimeStamp": "2022-06-09T11:27:11Z"
+      },
+      {
+        "type": "application/vnd.sas.decision.step.ruleset",
+        "ruleSet": { "name": "Legacy Rules" }
+      }
+    ]
+  }
+}
