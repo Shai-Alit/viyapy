@@ -52,6 +52,11 @@ dev = [
     "types-requests",
 ]
 docs = [
+    # Pin to the MkDocs 1.x line we build against. A separate "MkDocs 2.0" effort
+    # (announced Feb 2026) is incompatible with the 1.x plugin/theming API that
+    # Material and mkdocstrings use; keep this cap until we deliberately migrate.
+    # Ref: https://squidfunk.github.io/mkdocs-material/blog/2026/02/18/mkdocs-2.0/
+    "mkdocs>=1.6,<2",
     "mkdocs-material>=9.5",
     "mkdocstrings[python]>=0.25",
 ]
