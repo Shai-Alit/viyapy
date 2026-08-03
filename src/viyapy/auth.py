@@ -67,8 +67,10 @@ def read_token(provider: TokenProvider) -> str:
     except ViyaError:
         raise  # already a typed viyapy error; let it through unchanged
     except Exception as exc:
-        # Translate any foreign provider failure into the typed hierarchy.
-        raise ViyaAuthError(f"the auth token provider raised {type(exc).__name__}: {exc}") from exc
+        # Translate any foreign provider failure into the typed hierarchy. Only
+        # the exception *type* is embedded — the provider's own message could
+        # contain the raw token; the original stays available via __cause__.
+        raise ViyaAuthError(f"the auth token provider raised {type(exc).__name__}") from exc
     if not isinstance(token, str) or not token.strip():
         raise ViyaConfigError("the auth token provider returned an empty or non-string token")
     return token.strip()
