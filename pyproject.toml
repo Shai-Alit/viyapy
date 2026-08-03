@@ -109,6 +109,8 @@ convention = "google"
 # Tests and nox: prints allowed; docstrings not required.
 "tests/**" = ["T20", "D"]
 "noxfile.py" = ["T20", "D"]
+# Example scripts are CLI programs: printing to stdout is their purpose.
+"examples/**" = ["T20"]
 
 [tool.ruff.lint.isort]
 known-first-party = ["viyapy"]

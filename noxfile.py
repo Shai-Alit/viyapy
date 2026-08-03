@@ -27,16 +27,16 @@ def test(session: nox.Session) -> None:
 def lint(session: nox.Session) -> None:
     """Lint and check formatting with ruff."""
     session.install("ruff>=0.5")
-    session.run("ruff", "check", "src", "tests", "noxfile.py")
-    session.run("ruff", "format", "--check", "src", "tests", "noxfile.py")
+    session.run("ruff", "check", "src", "tests", "examples", "noxfile.py")
+    session.run("ruff", "format", "--check", "src", "tests", "examples", "noxfile.py")
 
 
 @nox.session(python="3.11")
 def format(session: nox.Session) -> None:
     """Auto-format the codebase with ruff."""
     session.install("ruff>=0.5")
-    session.run("ruff", "format", "src", "tests", "noxfile.py")
-    session.run("ruff", "check", "--fix", "src", "tests", "noxfile.py")
+    session.run("ruff", "format", "src", "tests", "examples", "noxfile.py")
+    session.run("ruff", "check", "--fix", "src", "tests", "examples", "noxfile.py")
 
 
 @nox.session(python="3.11")
