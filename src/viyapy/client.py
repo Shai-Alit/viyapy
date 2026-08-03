@@ -5,6 +5,7 @@ from __future__ import annotations
 import requests
 
 from ._http import DEFAULT_MAX_RETRIES, DEFAULT_TIMEOUT, HttpClient
+from .auth import TokenProvider
 from .decisions import DecisionsAPI
 from .dialects import resolve
 from .dialects.base import Dialect
@@ -17,9 +18,18 @@ class ViyaClient:
     Wires the hardened HTTP layer to a version dialect and exposes the
     ``decisions`` and ``mas`` operation groups.
 
+    Provide credentials with exactly one of ``token`` or ``auth``::
+
+        ViyaClient(base_url, "my-static-token")           # static bearer token
+        ViyaClient(base_url, auth=lambda: refresh())      # refreshing provider
+
     Args:
         base_url: Root URL of the Viya deployment, e.g. ``https://viya.example.com``.
-        token: OAuth2 bearer token.
+        token: A static OAuth2 bearer token. Mutually exclusive with ``auth``.
+        auth: A token provider — a zero-argument callable returning the current
+            bearer token, called on every request (so a provider that refreshes
+            internally rotates the token transparently). Mutually exclusive with
+            ``token``.
         viya_version: ``"3.5"``/``"4"`` or an explicit :class:`Dialect`.
             ``None`` (the default) resolves to the library default generation
             (Viya 4). Selects endpoint paths, media types, and the ``output``
@@ -37,14 +47,16 @@ class ViyaClient:
         dialect: The resolved version :class:`Dialect`.
 
     Raises:
-        ViyaConfigError: If configuration (URL, token, version, timeout) is invalid.
+        ViyaConfigError: If configuration is invalid, including neither or both
+            of ``token``/``auth`` (URL, version, timeout, etc.).
     """
 
     def __init__(
         self,
         base_url: str,
-        token: str,
+        token: str | None = None,
         *,
+        auth: TokenProvider | None = None,
         viya_version: str | Dialect | None = None,
         timeout: float | tuple[float, float] = DEFAULT_TIMEOUT,
         verify: bool | str = True,
@@ -57,6 +69,7 @@ class ViyaClient:
         self._http = HttpClient(
             base_url,
             token,
+            auth=auth,
             timeout=timeout,
             verify=verify,
             max_retries=max_retries,
