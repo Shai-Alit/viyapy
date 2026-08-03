@@ -96,6 +96,16 @@ def test_provider_exception_is_translated_to_auth_error() -> None:
     assert len(responses.calls) == 0  # provider failed before any Viya call
 
 
+@responses.activate
+def test_provider_exception_message_does_not_leak_token() -> None:
+    def leaky() -> str:
+        raise RuntimeError("auth failed for Bearer super-secret-xyz")
+
+    with pytest.raises(ViyaAuthError) as info:
+        HttpClient(BASE, auth=leaky).request("GET", "/ping")
+    assert "super-secret-xyz" not in str(info.value)  # provider text not embedded
+
+
 # -- one-of validation & redaction ------------------------------------------
 
 

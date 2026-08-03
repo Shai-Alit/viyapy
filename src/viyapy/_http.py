@@ -67,6 +67,7 @@ class _BoundedRetry(Retry):
     max_retry_after: float = DEFAULT_MAX_RETRY_AFTER
 
     def get_retry_after(self, response: Any) -> float | None:
+        """Return the server's ``Retry-After`` delay, capped at ``max_retry_after``."""
         retry_after = super().get_retry_after(response)
         if retry_after is None:
             return None
@@ -326,6 +327,7 @@ class HttpClient:
     # -- lifecycle ----------------------------------------------------------
 
     def close(self) -> None:
+        """Close the underlying :class:`requests.Session`."""
         self._session.close()
 
     def __enter__(self) -> HttpClient:
