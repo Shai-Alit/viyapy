@@ -7,8 +7,8 @@ over the REST API.
 It supports both **Viya 3.5** and **Viya 4** (LTS and Stable) through a
 version/dialect layer, and is built for production use:
 
-- one hardened HTTP stack with mandatory timeouts and retries (backoff + jitter,
-  bounded `Retry-After`);
+- one hardened HTTP stack with mandatory timeouts and a configurable retry budget
+  (backoff + jitter; the internal retry sleep bounds `Retry-After`);
 - a typed exception hierarchy — every failure raises a `ViyaError` subclass with
   actionable context;
 - bearer-token redaction in the library's logs and `repr`;

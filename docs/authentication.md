@@ -56,7 +56,11 @@ environment; viyapy consumes whatever valid bearer token you supply.
 TLS verification is **on by default**. To use a private CA, pass a bundle path:
 
 ```python
-client = ViyaClient(base_url, token=token, verify="/path/to/ca-bundle.pem")
+client = ViyaClient(
+    "https://viya.example.com",
+    token=os.environ["VIYA_TOKEN"],
+    verify="/path/to/ca-bundle.pem",
+)
 ```
 
 Disabling verification (`verify=False`) emits a

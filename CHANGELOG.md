@@ -9,6 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Documentation site (MkDocs Material + mkdocstrings): guides for getting
+  started, authentication, decisions, MAS execution, error handling, and 2.x→3.x
+  migration, plus an autodoc API reference generated from the docstrings. A
+  rewritten README and an enforced docstring gate (ruff pydocstyle) accompany it.
+
 - `ViyaClient` — the public entry point wiring the HTTP layer to a version
   dialect, with `client.decisions` (`get`, `list_models`) and `client.mas`
   (`execute`) operation groups. Exported from the package root, works as a
