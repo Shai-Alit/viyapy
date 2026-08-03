@@ -6,6 +6,7 @@ from collections.abc import Mapping
 from typing import Any
 
 from ._http import HttpClient
+from ._validation import require_identifier
 from .dialects.base import DEFAULT_MAS_STEP, Dialect
 from .models import ExecutionResult
 
@@ -40,10 +41,13 @@ class MASClient:
             The parsed :class:`ExecutionResult`.
 
         Raises:
+            ViyaConfigError: ``module_id`` or ``step`` is empty or not a string.
             ViyaNotFoundError: The module or step does not exist.
             ViyaResponseError: The response lacked an output list.
             ViyaError: On any other failure.
         """
+        module_id = require_identifier(module_id, "module_id")
+        step = require_identifier(step, "step")
         raw = self._http.request_json(
             "POST",
             self._dialect.mas_execute_path(module_id, step),

@@ -10,7 +10,7 @@ import pytest
 import responses
 
 from viyapy import ViyaClient
-from viyapy.exceptions import ViyaNotFoundError
+from viyapy.exceptions import ViyaConfigError, ViyaNotFoundError
 
 BASE = "https://viya.example.com"
 
@@ -50,6 +50,21 @@ def test_execute_custom_step_path() -> None:
     responses.add(responses.POST, url, json={"outputs": []}, status=200)
     make_client().mas.execute("m", {}, step="score")
     assert responses.calls[0].request.url.endswith("/steps/score")
+
+
+@responses.activate
+@pytest.mark.parametrize("bad", ["", "   "])
+def test_execute_blank_module_id_fails_fast(bad: str) -> None:
+    with pytest.raises(ViyaConfigError):
+        make_client().mas.execute(bad, {"a": 1})
+    assert len(responses.calls) == 0
+
+
+@responses.activate
+def test_execute_blank_step_fails_fast() -> None:
+    with pytest.raises(ViyaConfigError):
+        make_client().mas.execute("m", {"a": 1}, step="  ")
+    assert len(responses.calls) == 0
 
 
 @responses.activate

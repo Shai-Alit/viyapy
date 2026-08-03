@@ -4,11 +4,13 @@ from __future__ import annotations
 
 from unittest import mock
 
+import pytest
 import requests
 
 from viyapy import ViyaClient
 from viyapy.decisions import DecisionsAPI
 from viyapy.dialects import Viya4Dialect, Viya35Dialect
+from viyapy.exceptions import ViyaConfigError
 from viyapy.mas import MASClient
 
 BASE = "https://viya.example.com"
@@ -24,6 +26,11 @@ def test_defaults_to_viya4() -> None:
 def test_version_selects_dialect() -> None:
     client = ViyaClient(BASE, "tok", viya_version="3.5", session=mock.Mock(spec=requests.Session))
     assert isinstance(client.dialect, Viya35Dialect)
+
+
+def test_invalid_version_raises_config_error() -> None:
+    with pytest.raises(ViyaConfigError):
+        ViyaClient(BASE, "tok", viya_version="9", session=mock.Mock(spec=requests.Session))
 
 
 def test_base_url_property_normalized() -> None:

@@ -9,7 +9,7 @@ import pytest
 import responses
 
 from viyapy import ViyaClient
-from viyapy.exceptions import ViyaNotFoundError, ViyaResponseError
+from viyapy.exceptions import ViyaConfigError, ViyaNotFoundError, ViyaResponseError
 
 BASE = "https://viya.example.com"
 
@@ -47,6 +47,15 @@ def test_get_decision_viya35_generation(load_fixture: Callable[[str, str], Any])
     decision = make_client("3.5").decisions.get("d1")
     assert decision.id == "d1"
     assert decision.raw == raw
+
+
+@responses.activate
+@pytest.mark.parametrize("bad_id", ["", "   "])
+def test_get_blank_decision_id_fails_fast(bad_id: str) -> None:
+    # Validation must raise before any HTTP call; responses would error on one.
+    with pytest.raises(ViyaConfigError):
+        make_client().decisions.get(bad_id)
+    assert len(responses.calls) == 0
 
 
 @responses.activate
