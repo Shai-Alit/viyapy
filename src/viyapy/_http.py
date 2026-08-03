@@ -26,6 +26,7 @@ import urllib3
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
+from .auth import TokenProvider, read_token, resolve_token_provider
 from .exceptions import (
     ViyaAPIError,
     ViyaAuthError,
@@ -101,8 +102,9 @@ class HttpClient:
     def __init__(
         self,
         base_url: str,
-        token: str,
+        token: str | None = None,
         *,
+        auth: TokenProvider | None = None,
         timeout: float | tuple[float, float] = DEFAULT_TIMEOUT,
         verify: bool | str = True,
         max_retries: int = DEFAULT_MAX_RETRIES,
@@ -127,9 +129,7 @@ class HttpClient:
                 stacklevel=2,
             )
 
-        cleaned_token = str(token).strip() if token is not None else ""
-        if not cleaned_token:
-            raise ViyaConfigError("token must be a non-empty string")
+        self._auth = resolve_token_provider(token, auth)
 
         _validate_timeout(timeout)
 
@@ -145,7 +145,6 @@ class HttpClient:
             )
 
         self.base_url = cleaned_url.rstrip("/")
-        self._token = cleaned_token
         self.timeout = timeout
         self.verify = verify
         self._max_retries = max_retries
@@ -221,7 +220,7 @@ class HttpClient:
             _validate_timeout(timeout)
         url = self._url(path)
         headers = {
-            "Authorization": f"Bearer {self._token}",
+            "Authorization": f"Bearer {read_token(self._auth)}",
             "Accept": accept,
             "User-Agent": self._user_agent,
         }
@@ -333,7 +332,7 @@ class HttpClient:
 
     def __repr__(self) -> str:
         return (
-            f"HttpClient(base_url={self.base_url!r}, token='***', "
+            f"HttpClient(base_url={self.base_url!r}, auth='***', "
             f"timeout={self.timeout!r}, verify={self.verify!r})"
         )
 

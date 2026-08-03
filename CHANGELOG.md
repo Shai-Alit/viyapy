@@ -13,6 +13,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   dialect, with `client.decisions` (`get`, `list_models`) and `client.mas`
   (`execute`) operation groups. Exported from the package root, works as a
   context manager, and redacts the token in `repr`.
+- Pluggable authentication: pass either a static `token` or an `auth` token
+  provider (`TokenProvider`, a zero-arg callable returning the current bearer
+  token) — exactly one is required. The provider is called per request, so a
+  provider that refreshes internally rotates the token transparently. This makes
+  future OAuth/client-credentials flows additive rather than breaking.
 - `HttpClient.request_json` helper that raises `ViyaResponseError` when a 2xx
   response body is not JSON, or is JSON that is not an object.
 - Boundary validation of identifiers: `decisions.get`/`list_models` and

@@ -13,6 +13,7 @@ import logging
 from importlib.metadata import PackageNotFoundError, version
 
 from ._logging import RedactingFilter, RedactingNullHandler
+from .auth import TokenProvider
 from .client import ViyaClient
 from .exceptions import (
     ViyaAPIError,
@@ -46,6 +47,7 @@ __all__ = [
     "Decision",
     "ExecutionResult",
     "ModelStep",
+    "TokenProvider",
     "ViyaAPIError",
     "ViyaAuthError",
     "ViyaClient",

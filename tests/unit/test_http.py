@@ -80,7 +80,7 @@ def test_empty_token_raises_config_error(bad: object) -> None:
 
 def test_token_is_stripped() -> None:
     client = HttpClient(BASE, "  tok-with-newline\n", max_retries=0)
-    assert client._token == "tok-with-newline"
+    assert client._auth() == "tok-with-newline"
 
 
 @pytest.mark.parametrize("bad", [None, 0, -1, (0, 30), (5, -1), (5,), "30", True])
