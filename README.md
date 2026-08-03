@@ -3,7 +3,8 @@
 [![PyPI](https://img.shields.io/pypi/v/viyapy.svg)](https://pypi.org/project/viyapy/)
 [![Python versions](https://img.shields.io/pypi/pyversions/viyapy.svg)](https://pypi.org/project/viyapy/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
-<!-- CI and coverage badges are added when the CI workflow lands (Phase 4). -->
+[![CI](https://github.com/Shai-Alit/viyapy/actions/workflows/ci.yml/badge.svg)](https://github.com/Shai-Alit/viyapy/actions/workflows/ci.yml)
+[![Coverage](https://img.shields.io/badge/coverage-%E2%89%A590%25-brightgreen.svg)](https://github.com/Shai-Alit/viyapy/actions/workflows/ci.yml)
 
 A typed Python client for **SAS Viya Intelligent Decisioning** — inspect decision
 flows and execute [Micro Analytic Score (MAS)](https://developer.sas.com/) modules
