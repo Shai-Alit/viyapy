@@ -14,8 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (`execute`) operation groups. Exported from the package root, works as a
   context manager, and redacts the token in `repr`.
 - `HttpClient.request_json` helper that raises `ViyaResponseError` when a 2xx
-  response body is not JSON.
-
+  response body is not JSON, or is JSON that is not an object.
 
 - Domain dataclasses `Decision`, `ModelStep`, and `ExecutionResult` (exported
   from the package root), each retaining its raw payload on `.raw`.

@@ -14,8 +14,8 @@ from viyapy.exceptions import ViyaNotFoundError, ViyaResponseError
 BASE = "https://viya.example.com"
 
 
-def make_client() -> ViyaClient:
-    return ViyaClient(BASE, "tok", max_retries=0)
+def make_client(version: str = "4") -> ViyaClient:
+    return ViyaClient(BASE, "tok", viya_version=version, max_retries=0)
 
 
 @responses.activate
@@ -41,6 +41,15 @@ def test_list_models_returns_model_steps(load_fixture: Callable[[str, str], Any]
 
 
 @responses.activate
+def test_get_decision_viya35_generation(load_fixture: Callable[[str, str], Any]) -> None:
+    raw = load_fixture("viya35", "decision_content.json")
+    responses.add(responses.GET, f"{BASE}/decisions/flows/d1", json=raw, status=200)
+    decision = make_client("3.5").decisions.get("d1")
+    assert decision.id == "d1"
+    assert decision.raw == raw
+
+
+@responses.activate
 def test_get_missing_decision_raises_not_found() -> None:
     responses.add(responses.GET, f"{BASE}/decisions/flows/nope", json={"message": "no"}, status=404)
     with pytest.raises(ViyaNotFoundError):
@@ -52,5 +61,14 @@ def test_non_json_decision_body_raises_response_error() -> None:
     responses.add(
         responses.GET, f"{BASE}/decisions/flows/d1", body="<html>not json</html>", status=200
     )
+    with pytest.raises(ViyaResponseError):
+        make_client().decisions.get("d1")
+
+
+@responses.activate
+def test_json_but_non_object_decision_body_raises_response_error() -> None:
+    # Valid JSON, wrong shape: an array (or any non-object) must raise a typed
+    # ViyaResponseError rather than blowing up later in the dialect parser.
+    responses.add(responses.GET, f"{BASE}/decisions/flows/d1", json=[1, 2, 3], status=200)
     with pytest.raises(ViyaResponseError):
         make_client().decisions.get("d1")
