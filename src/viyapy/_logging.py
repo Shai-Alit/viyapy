@@ -25,6 +25,7 @@ class RedactingFilter(logging.Filter):
     """
 
     def filter(self, record: logging.LogRecord) -> bool:
+        """Redact any bearer token in the record's message/args; always keep it."""
         if isinstance(record.msg, str):
             record.msg = _BEARER_RE.sub(_REDACTED, record.msg)
         args = record.args
@@ -56,4 +57,4 @@ class RedactingNullHandler(logging.Handler):
     """
 
     def emit(self, record: logging.LogRecord) -> None:
-        pass
+        """Do nothing (the record is only scrubbed by the attached filter)."""

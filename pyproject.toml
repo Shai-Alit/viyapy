@@ -89,12 +89,21 @@ select = [
     "PTH",       # prefer pathlib
     "RUF",       # ruff-specific
     "T20",       # flake8-print  (no print in library code)
+    "D",         # pydocstyle    (public API must be documented)
 ]
 # E722 (bare except) is covered by E; BLE001 forbids `except Exception` without re-raise.
+ignore = [
+    "D105",      # magic-method docstrings not required (dunders)
+    "D107",      # __init__ documented via the class docstring, not its own
+]
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
 
 [tool.ruff.lint.per-file-ignores]
-"tests/**" = ["T20"]        # prints allowed in tests
-"noxfile.py" = ["T20"]
+# Tests and nox: prints allowed; docstrings not required.
+"tests/**" = ["T20", "D"]
+"noxfile.py" = ["T20", "D"]
 
 [tool.ruff.lint.isort]
 known-first-party = ["viyapy"]
