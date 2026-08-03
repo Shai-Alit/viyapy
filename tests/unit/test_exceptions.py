@@ -97,3 +97,18 @@ def test_response_error_carries_body() -> None:
     assert err.response_body == {"unexpected": True}
     assert isinstance(err, ViyaError)
     assert not isinstance(err, ViyaAPIError)
+
+
+def test_api_error_str_includes_status_code_and_correlation() -> None:
+    err = ViyaAPIError(
+        "boom",
+        status_code=409,
+        viya_error_code=1234,
+        correlation_id="abc-123",
+    )
+    text = str(err)
+    assert text == "boom (HTTP 409) [errorCode=1234] [correlationId=abc-123]"
+
+
+def test_api_error_str_omits_absent_fields() -> None:
+    assert str(ViyaAPIError("just a message")) == "just a message"

@@ -1,21 +1,18 @@
 # Migrating from viyapy 2.x to 3.x
 
-viyapy 3.x replaces the flat helper functions in `viyapy.viya_utils` with a
-single, hardened `ViyaClient`. The client adds mandatory timeouts, retries with
-backoff, a typed exception hierarchy, token redaction in logs/`repr`, and a
-version/dialect layer that handles SAS Viya 3.5 vs Viya 4 differences (including
-the MAS `output` vs `outputs` response-shape pitfall) for you.
+viyapy 3.0 replaces the flat helper functions from the 2.x `viyapy.viya_utils`
+module with a single, hardened `ViyaClient`. The client adds mandatory timeouts,
+retries with backoff, a typed exception hierarchy, token redaction in
+logs/`repr`, and a version/dialect layer that handles SAS Viya 3.5 vs Viya 4
+differences (including the MAS `output` vs `outputs` response-shape pitfall) for
+you.
 
-## Deprecation timeline
+## Clean break in 3.0
 
-- **3.x** — `viyapy.viya_utils` still works but emits a `DeprecationWarning` on
-  import. `viyapy.compat` provides same-signature drop-ins that also warn and
-  delegate to `ViyaClient`.
-- **4.0** — `viyapy.viya_utils` and `viyapy.compat` are removed. Only the
-  `ViyaClient` API remains.
-
-Run your test suite with `-W error::DeprecationWarning` to surface every call
-site that still uses the legacy API.
+The 2.x flat API had effectively a single user, so 3.0 removes it outright
+rather than carrying a deprecation shim: `viyapy.viya_utils` no longer exists.
+This document maps each old function to its `ViyaClient` equivalent so any
+existing 2.x script can be ported directly.
 
 ## The one behavior change to know about
 
@@ -96,18 +93,3 @@ outputs = unpack_viya_outputs(resp)
 outputs = client.mas.execute(module_id, inputs).outputs
 ```
 
-## Minimal-edit bridge
-
-If you cannot refactor immediately, switch the import to `viyapy.compat`. The
-signatures are identical, the return shapes match 2.x, and each call warns and
-routes through the modern surface — `ViyaClient` for the HTTP-backed helpers,
-and the dialect layer for the pure `gen_viya_inputs` body builder (so you get
-the fixes, including no name-mangling):
-
-```python
-# from viyapy.viya_utils import get_models, call_id_api
-from viyapy.compat import get_models, call_id_api
-```
-
-This is a stepping stone, not a destination — `viyapy.compat` is removed in 4.0
-alongside `viyapy.viya_utils`.

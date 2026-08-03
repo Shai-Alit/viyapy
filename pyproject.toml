@@ -95,14 +95,6 @@ select = [
 [tool.ruff.lint.per-file-ignores]
 "tests/**" = ["T20"]        # prints allowed in tests
 "noxfile.py" = ["T20"]
-# Legacy flat module: retained for backward compatibility and wrapped by the
-# deprecation shim in slice 1d. Exempt from lint until it is removed in v4.
-"src/viyapy/viya_utils.py" = ["ALL"]
-
-[tool.ruff.format]
-# Keep the frozen legacy module in its original 2.x style; it is exempt from
-# lint above and removed in v4, so don't reformat it either.
-exclude = ["src/viyapy/viya_utils.py"]
 
 [tool.ruff.lint.isort]
 known-first-party = ["viyapy"]
@@ -123,19 +115,15 @@ files = ["src"]
 module = ["tests.*"]
 disallow_untyped_defs = false
 
-# Legacy flat module is untyped by design; it is replaced by the compat shim
-# in slice 1d. Exempt from strict typing until it is removed in v4.
-[[tool.mypy.overrides]]
-module = ["viyapy.viya_utils"]
-ignore_errors = true
-
 # ----------------------------------------------------------------------------
 # Pytest + coverage
 # ----------------------------------------------------------------------------
 [tool.pytest.ini_options]
 minversion = "8.0"
 testpaths = ["tests"]
-addopts = "-ra --strict-markers"
+# Coverage is measured on every run and gated (see [tool.coverage.report]).
+# For a fast focused run without the gate, pass --no-cov.
+addopts = "-ra --strict-markers --cov=viyapy --cov-report=term-missing"
 markers = [
     "integration: opt-in tests that hit a live Viya server (skipped by default)",
 ]
@@ -146,7 +134,7 @@ branch = true
 
 [tool.coverage.report]
 show_missing = true
-# Coverage gate is enforced starting in Phase 2 (target: fail_under = 90).
+fail_under = 90
 exclude_lines = [
     "pragma: no cover",
     "if TYPE_CHECKING:",

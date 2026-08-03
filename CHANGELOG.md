@@ -18,11 +18,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Boundary validation of identifiers: `decisions.get`/`list_models` and
   `mas.execute` raise `ViyaConfigError` for an empty or non-string
   `decision_id`, `module_id`, or `step` before any request is issued.
-- `viyapy.compat` — same-signature drop-in replacements for the legacy
-  `viya_utils` helpers (`get_decision_content`, `get_models`, `gen_viya_inputs`,
-  `call_id_api`, `unpack_viya_outputs`) that emit `DeprecationWarning` and
-  delegate to `ViyaClient` (or, for `gen_viya_inputs`, the dialect layer). A
-  `MIGRATION.md` guide maps each legacy call to its modern equivalent.
+- `MIGRATION.md` — maps each legacy 2.x `viya_utils` function to its
+  `ViyaClient` equivalent for porting existing scripts.
 - Domain dataclasses `Decision`, `ModelStep`, and `ExecutionResult` (exported
   from the package root), each retaining its raw payload on `.raw`.
 - Version/dialect layer (`viyapy.dialects`) localizing SAS Viya 3.5 vs Viya 4
@@ -54,13 +51,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Curated package exports (`__all__`) and `__version__`.
 - Project foundation: hatchling packaging, `ruff`/`mypy`/`pytest`/coverage
   configuration, `nox` sessions, pre-commit, `py.typed`, and `.gitattributes`.
-
-### Deprecated
-
-- `viyapy.viya_utils` and the `viyapy.compat` bridge. Both remain importable
-  through the 3.x line and are scheduled for removal in 4.0; importing
-  `viya_utils` or calling any `compat` function emits a `DeprecationWarning`.
-  Migrate to `ViyaClient` (see `MIGRATION.md`).
+- Enforced coverage gate: the suite fails under 90% line/branch coverage
+  (`--cov-fail-under` via `[tool.coverage.report]`); the modern core sits at
+  ~98%.
 
 ### Changed
 
@@ -69,4 +62,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Removed
 
+- The 2.x flat API (`viyapy.viya_utils`) is removed. With no external installs
+  to migrate, 3.0 is a clean break rather than a deprecation cycle; port scripts
+  to `ViyaClient` using `MIGRATION.md`.
 - Legacy script-style tests that required a live Viya server and `keyring`.
