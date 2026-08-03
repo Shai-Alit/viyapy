@@ -1,15 +1,10 @@
 """viyapy — a Python client for SAS Viya Intelligent Decisioning.
 
 Supports SAS Viya 3.5 and Viya 4 (LTS and Stable) through a version/dialect
-layer. The modern ``ViyaClient`` API is the supported surface across the 3.x
-line and is importable, with the domain models and typed exception hierarchy,
-directly from the package root.
-
-The legacy 2.x flat helpers in :mod:`viyapy.viya_utils` remain importable but
-are deprecated and slated for removal in 4.0. :mod:`viyapy.compat` offers
-same-signature drop-ins that emit ``DeprecationWarning`` and delegate to
-``ViyaClient`` (or the dialect layer for the pure input builder); see
-``MIGRATION.md`` for the mapping and timeline.
+layer. The ``ViyaClient`` API is the entire public surface and is importable,
+with the domain models and typed exception hierarchy, directly from the package
+root. (The 2.x flat ``viya_utils`` helpers were removed in 3.0 — see
+``MIGRATION.md`` for the mapping to the client API.)
 """
 
 from __future__ import annotations

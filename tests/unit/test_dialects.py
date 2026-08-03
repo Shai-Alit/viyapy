@@ -36,6 +36,11 @@ def test_resolve_passes_through_dialect_instance() -> None:
     assert resolve(dialect) is dialect
 
 
+def test_dialect_repr_names_class_and_generation() -> None:
+    assert repr(Viya4Dialect()) == "Viya4Dialect(name='viya4')"
+    assert repr(Viya35Dialect()) == "Viya35Dialect(name='viya3.5')"
+
+
 def test_resolve_unknown_version_raises() -> None:
     with pytest.raises(ViyaConfigError):
         resolve("9")
