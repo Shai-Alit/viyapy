@@ -58,7 +58,8 @@ def audit(session: nox.Session) -> None:
 def docs(session: nox.Session) -> None:
     """Build the documentation site (fails on warnings)."""
     session.install("-e", ".[docs]")
-    session.run("mkdocs", "build", "--strict")
+    # Silence Material's "MkDocs 2.0" advisory banner in CI logs.
+    session.run("mkdocs", "build", "--strict", env={"NO_MKDOCS_2_WARNING": "1"})
 
 
 @nox.session(python="3.11")

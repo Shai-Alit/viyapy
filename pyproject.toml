@@ -52,6 +52,10 @@ dev = [
     "types-requests",
 ]
 docs = [
+    # Pin mkdocs to 1.x: "MkDocs 2.0" is an incompatible rewrite that drops the
+    # plugin/theming system Material and mkdocstrings rely on (see the build-time
+    # warning banner). Keep us on the 1.x line until we deliberately migrate.
+    "mkdocs>=1.6,<2",
     "mkdocs-material>=9.5",
     "mkdocstrings[python]>=0.25",
 ]
