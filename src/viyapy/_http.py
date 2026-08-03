@@ -80,7 +80,11 @@ class HttpClient:
         base_url: Absolute root URL of the Viya deployment, e.g.
             ``https://viya.example.com``. Must include an ``http``/``https``
             scheme and a host.
-        token: OAuth2 bearer token. Surrounding whitespace is stripped.
+        token: A static OAuth2 bearer token (whitespace stripped). Mutually
+            exclusive with ``auth``; provide exactly one.
+        auth: A token provider — a zero-argument callable returning the current
+            bearer token, called on each request. Mutually exclusive with
+            ``token``. See :mod:`viyapy.auth`.
         timeout: ``(connect, read)`` seconds, or a single positive float applied
             to both. Must not be ``None`` (that would block forever).
         verify: TLS verification — ``True``, ``False``, or a CA-bundle path.
@@ -95,8 +99,8 @@ class HttpClient:
             because the injected session keeps whatever adapters it already has.
 
     Raises:
-        ViyaConfigError: If ``base_url``, ``token``, ``timeout``, or
-            ``max_retries`` is invalid.
+        ViyaConfigError: If ``base_url``, ``token``/``auth`` (neither or both,
+            or an invalid token), ``timeout``, or ``max_retries`` is invalid.
     """
 
     def __init__(
