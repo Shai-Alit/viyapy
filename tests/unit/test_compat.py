@@ -13,6 +13,7 @@ import pytest
 import responses
 
 from viyapy import compat
+from viyapy.exceptions import ViyaNotFoundError
 
 BASE = "https://viya.example.com"
 
@@ -50,6 +51,21 @@ def test_get_models_returns_legacy_shape(load_fixture: Callable[[str, str], Any]
     assert set(models[0]) == {"Model Name", "Modified By", "Modified Timestamp"}
 
 
+@responses.activate
+def test_get_decision_content_propagates_typed_error() -> None:
+    responses.add(responses.GET, f"{BASE}/decisions/flows/nope", json={"m": "no"}, status=404)
+    with pytest.warns(DeprecationWarning), pytest.raises(ViyaNotFoundError):
+        compat.get_decision_content(BASE, "nope", "tok")
+
+
+@responses.activate
+def test_call_id_api_propagates_typed_error() -> None:
+    url = f"{BASE}/microanalyticScore/modules/gone/steps/execute"
+    responses.add(responses.POST, url, json={"m": "no"}, status=404)
+    with pytest.warns(DeprecationWarning), pytest.raises(ViyaNotFoundError):
+        compat.call_id_api(BASE, "tok", {"a": 1}, "gone")
+
+
 def test_gen_viya_inputs_is_json_string_without_mangling() -> None:
     with pytest.warns(DeprecationWarning):
         body = compat.gen_viya_inputs({"amount": 1000, "name": "x"})
@@ -83,3 +99,10 @@ def test_unpack_viya_outputs_handles_both_keys() -> None:
 def test_unpack_viya_outputs_missing_key_returns_empty() -> None:
     with pytest.warns(DeprecationWarning):
         assert compat.unpack_viya_outputs({"executionState": "completed"}) == {}
+
+
+def test_unpack_viya_outputs_skips_malformed_items() -> None:
+    # Non-mapping entries and name-less dicts are skipped, not fatal.
+    response = {"outputs": ["junk", {"value": 9}, {"name": "ok", "value": 1}]}
+    with pytest.warns(DeprecationWarning):
+        assert compat.unpack_viya_outputs(response) == {"ok": 1}

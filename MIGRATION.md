@@ -100,7 +100,9 @@ outputs = client.mas.execute(module_id, inputs).outputs
 
 If you cannot refactor immediately, switch the import to `viyapy.compat`. The
 signatures are identical, the return shapes match 2.x, and each call warns and
-routes through `ViyaClient` (so you get the fixes, including no name-mangling):
+routes through the modern surface — `ViyaClient` for the HTTP-backed helpers,
+and the dialect layer for the pure `gen_viya_inputs` body builder (so you get
+the fixes, including no name-mangling):
 
 ```python
 # from viyapy.viya_utils import get_models, call_id_api

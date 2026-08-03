@@ -21,16 +21,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `viyapy.compat` — same-signature drop-in replacements for the legacy
   `viya_utils` helpers (`get_decision_content`, `get_models`, `gen_viya_inputs`,
   `call_id_api`, `unpack_viya_outputs`) that emit `DeprecationWarning` and
-  delegate to `ViyaClient`. A `MIGRATION.md` guide maps each legacy call to its
-  modern equivalent.
-
-### Deprecated
-
-- `viyapy.viya_utils` and the `viyapy.compat` bridge. Both remain importable
-  through the 3.x line and are scheduled for removal in 4.0; importing
-  `viya_utils` or calling any `compat` function emits a `DeprecationWarning`.
-  Migrate to `ViyaClient` (see `MIGRATION.md`).
-
+  delegate to `ViyaClient` (or, for `gen_viya_inputs`, the dialect layer). A
+  `MIGRATION.md` guide maps each legacy call to its modern equivalent.
 - Domain dataclasses `Decision`, `ModelStep`, and `ExecutionResult` (exported
   from the package root), each retaining its raw payload on `.raw`.
 - Version/dialect layer (`viyapy.dialects`) localizing SAS Viya 3.5 vs Viya 4
@@ -62,6 +54,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Curated package exports (`__all__`) and `__version__`.
 - Project foundation: hatchling packaging, `ruff`/`mypy`/`pytest`/coverage
   configuration, `nox` sessions, pre-commit, `py.typed`, and `.gitattributes`.
+
+### Deprecated
+
+- `viyapy.viya_utils` and the `viyapy.compat` bridge. Both remain importable
+  through the 3.x line and are scheduled for removal in 4.0; importing
+  `viya_utils` or calling any `compat` function emits a `DeprecationWarning`.
+  Migrate to `ViyaClient` (see `MIGRATION.md`).
 
 ### Changed
 

@@ -8,7 +8,8 @@ directly from the package root.
 The legacy 2.x flat helpers in :mod:`viyapy.viya_utils` remain importable but
 are deprecated and slated for removal in 4.0. :mod:`viyapy.compat` offers
 same-signature drop-ins that emit ``DeprecationWarning`` and delegate to
-``ViyaClient``; see ``MIGRATION.md`` for the mapping and timeline.
+``ViyaClient`` (or the dialect layer for the pure input builder); see
+``MIGRATION.md`` for the mapping and timeline.
 """
 
 from __future__ import annotations

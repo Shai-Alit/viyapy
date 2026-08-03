@@ -3,9 +3,10 @@
 These functions mirror the signatures of the legacy flat helpers in
 :mod:`viyapy.viya_utils` so existing scripts can switch imports with minimal
 edits, but each one emits a :class:`DeprecationWarning` and delegates to the
-modern :class:`viyapy.ViyaClient` API — so callers get the hardened HTTP layer,
-typed errors, and the corrected MAS input handling (no ``_`` name-mangling)
-while they migrate.
+modern surface — :class:`viyapy.ViyaClient` for the HTTP-backed helpers, and the
+dialect layer for the pure ``gen_viya_inputs`` body builder. Callers get the
+hardened HTTP layer, typed errors, and the corrected MAS input handling (no
+``_`` name-mangling) while they migrate.
 
 All of this is scheduled for removal in viyapy 4.0. See ``MIGRATION.md`` for the
 per-function replacement and timeline.
@@ -77,6 +78,8 @@ def gen_viya_inputs(feature_dict: Mapping[str, Any]) -> str:
     without the trailing-underscore name-mangling that helper applied.
     """
     _warn("gen_viya_inputs", "viyapy.dialects.Viya4Dialect().build_inputs(...)")
+    # build_inputs is identical across dialects; the Viya 4 dialect is used here
+    # only as a concrete carrier for it.
     return json.dumps(Viya4Dialect().build_inputs(feature_dict))
 
 
@@ -106,5 +109,11 @@ def unpack_viya_outputs(response: Mapping[str, Any]) -> dict[str, Any]:
     for key in ("outputs", "output"):
         value = response.get(key)
         if isinstance(value, list):
-            return {elem["name"]: elem.get("value", "") for elem in value}
+            # Mirror Dialect.parse_execution: skip non-mapping / name-less items
+            # rather than raising a raw TypeError/KeyError on a malformed body.
+            return {
+                elem["name"]: elem.get("value", "")
+                for elem in value
+                if isinstance(elem, Mapping) and "name" in elem
+            }
     return {}
