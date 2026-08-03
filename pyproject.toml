@@ -99,6 +99,11 @@ select = [
 # deprecation shim in slice 1d. Exempt from lint until it is removed in v4.
 "src/viyapy/viya_utils.py" = ["ALL"]
 
+[tool.ruff.format]
+# Keep the frozen legacy module in its original 2.x style; it is exempt from
+# lint above and removed in v4, so don't reformat it either.
+exclude = ["src/viyapy/viya_utils.py"]
+
 [tool.ruff.lint.isort]
 known-first-party = ["viyapy"]
 

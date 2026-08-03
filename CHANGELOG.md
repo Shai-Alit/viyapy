@@ -18,6 +18,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Boundary validation of identifiers: `decisions.get`/`list_models` and
   `mas.execute` raise `ViyaConfigError` for an empty or non-string
   `decision_id`, `module_id`, or `step` before any request is issued.
+- `viyapy.compat` — same-signature drop-in replacements for the legacy
+  `viya_utils` helpers (`get_decision_content`, `get_models`, `gen_viya_inputs`,
+  `call_id_api`, `unpack_viya_outputs`) that emit `DeprecationWarning` and
+  delegate to `ViyaClient`. A `MIGRATION.md` guide maps each legacy call to its
+  modern equivalent.
+
+### Deprecated
+
+- `viyapy.viya_utils` and the `viyapy.compat` bridge. Both remain importable
+  through the 3.x line and are scheduled for removal in 4.0; importing
+  `viya_utils` or calling any `compat` function emits a `DeprecationWarning`.
+  Migrate to `ViyaClient` (see `MIGRATION.md`).
 
 - Domain dataclasses `Decision`, `ModelStep`, and `ExecutionResult` (exported
   from the package root), each retaining its raw payload on `.raw`.
