@@ -29,7 +29,7 @@ try:
 except ViyaNotFoundError:
     ...  # the module or step does not exist
 except ViyaRateLimitError as exc:
-    wait = exc.retry_after       # seconds, normalized and bounded
+    wait = exc.retry_after       # the server's Retry-After in seconds, or None
 except ViyaError as exc:
     logger.error("Viya call failed: %s", exc)  # the base class catches everything
 ```
@@ -39,8 +39,11 @@ except ViyaError as exc:
 API errors ([`ViyaAPIError`][viyapy.ViyaAPIError] and its subclasses) carry the
 HTTP status, the SAS Viya error envelope (`errorCode`, `details`, and a
 `remediation` hint when present), a correlation id from the response headers when
-the server provides one, and the request URL/method — so a single log line or bug
-report is actionable without re-running.
+the server provides one, and the request URL/method — all as attributes
+(`exc.status_code`, `exc.viya_error_code`, `exc.details`, `exc.remediation`,
+`exc.correlation_id`, `exc.url`, `exc.method`). `str(exc)` includes the message,
+status, error code, and correlation id; log the other attributes explicitly if
+you need them in the line.
 
 Local errors carry their own context instead:
 [`ViyaConfigError`][viyapy.ViyaConfigError] for invalid arguments (raised before
@@ -51,10 +54,14 @@ body that couldn't be parsed (it attaches the raw body).
 
 - **Timeouts are mandatory** — a default of `(connect=5s, read=30s)`, overridable
   per client (`timeout=`) and per call. No request is ever issued without one.
-- **Retries** use exponential backoff with jitter on connection errors and
-  429/5xx, honoring a **bounded** `Retry-After` (a runaway server value can't
-  hang the caller). GETs retry freely; POSTs (MAS execute) do not, unless you opt
-  in with `retry_on_post=True`.
+- **Retries** use a configurable budget (`max_retries`) with exponential backoff
+  and jitter on connection errors and 429/5xx. The internal retry **sleep** honors
+  `Retry-After` but is **bounded**, so a runaway server value can't hang the
+  caller. Idempotent GETs use the retry budget; POSTs (MAS execute) are **not**
+  retried by default — opt in with `retry_on_post=True`, accepting the risk of
+  executing a decision twice. Note the raw server value exposed on
+  `ViyaRateLimitError.retry_after` is *not* capped (it may also be `None`), so
+  apply your own sanity limit before sleeping on it.
 
 ## Token redaction in logs
 
