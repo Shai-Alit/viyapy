@@ -50,6 +50,25 @@ def test_masks_bearer_in_nested_sequence_arg() -> None:
     assert "Bearer b" not in message
 
 
+def test_masks_bearer_when_message_is_a_mapping() -> None:
+    # A mapping passed directly as the message (not a format string) is scrubbed.
+    record = _record({"Authorization": "Bearer mapmsg-secret"})  # type: ignore[arg-type]
+    RedactingFilter().filter(record)
+    assert "mapmsg-secret" not in record.getMessage()
+
+
+def test_masks_bearer_in_set_arg() -> None:
+    record = _record("items=%s", ({"Bearer settok"},))
+    RedactingFilter().filter(record)
+    assert "settok" not in record.getMessage()
+
+
+def test_masks_bearer_in_bytes_arg() -> None:
+    record = _record("raw=%s", (b"Authorization: Bearer bytetok",))
+    RedactingFilter().filter(record)
+    assert "bytetok" not in record.getMessage()
+
+
 def test_leaves_non_token_text_untouched() -> None:
     record = _record("plain message with no secrets")
     RedactingFilter().filter(record)

@@ -10,9 +10,17 @@ flows and execute [Micro Analytic Score (MAS)](https://developer.sas.com/) modul
 over the REST API. It supports both **Viya 3.5** and **Viya 4** (LTS and Stable)
 through a version/dialect layer, and is built for production use: one hardened
 HTTP stack with mandatory timeouts and retries, a typed exception hierarchy,
-guaranteed bearer-token redaction, and full type hints (`py.typed`).
+bearer-token redaction in the library's logs and `repr`, and full type hints
+(`py.typed`).
 
 ## Install
+
+> **Pre-release note:** the `ViyaClient` API documented below ships in
+> **viyapy 3.0**, which is not yet published to PyPI (the current PyPI release
+> predates this API). Until 3.0 is released, install from source:
+> `pip install "git+https://github.com/Shai-Alit/viyapy@main"`.
+
+Once 3.0 is published, the usual install applies:
 
 ```bash
 pip install viyapy
@@ -23,8 +31,11 @@ Requires Python 3.9+.
 ## Quickstart
 
 ```python
+import os
+
 from viyapy import ViyaClient
 
+my_token = os.environ["VIYA_TOKEN"]  # your OAuth2 bearer token
 client = ViyaClient("https://viya.example.com", token=my_token)
 
 # Inspect a decision flow and its models
@@ -59,7 +70,7 @@ Provide credentials with exactly one of `token` or `auth`.
 A static bearer token:
 
 ```python
-client = ViyaClient("https://viya.example.com", token=my_token)
+client = ViyaClient("https://viya.example.com", token=os.environ["VIYA_TOKEN"])
 ```
 
 Or an `auth` **token provider** — a zero-argument callable returning the current
@@ -74,15 +85,20 @@ client = ViyaClient("https://viya.example.com", auth=bearer)
 ```
 
 TLS verification is on by default; pass `verify="/path/to/ca-bundle.pem"` for a
-custom CA, and see the docs before ever disabling it. The bearer token is never
-written to logs or `repr`.
+custom CA, and see the docs before ever disabling it. The library does not write
+the bearer token to its logs or `repr`; a redaction filter additionally scrubs
+any `Bearer <token>` pattern from log records as a backstop. (A custom `auth`
+provider is responsible for not leaking the token in its own exceptions/logs.)
 
 ## Error handling
 
-Every failure raises a typed `ViyaError` subclass carrying actionable context
-(HTTP status, the SAS Viya error code/details, correlation id) — the library
-never prints, never swallows exceptions, and never returns `None` to signal
-failure. Catch broadly or precisely:
+Every failure raises a typed `ViyaError` subclass — the library never prints,
+never swallows exceptions, and never returns `None` to signal failure. API
+errors (`ViyaAPIError` and its subclasses) carry the HTTP status, the SAS Viya
+error code and details, and a correlation id when the server provides one;
+local configuration errors (`ViyaConfigError`) and malformed-response errors
+(`ViyaResponseError`) carry their own context instead. Catch broadly or
+precisely:
 
 ```python
 from viyapy import ViyaError, ViyaNotFoundError, ViyaRateLimitError
@@ -108,8 +124,11 @@ later release). In the meantime:
 ## Supported versions
 
 - **Python:** 3.9 – 3.13
-- **SAS Viya:** 3.5 (Standard Support for qualifying Linux deployments through
-  Oct 1, 2027) and Viya 4 (LTS and Stable tracks)
+- **SAS Viya:** 3.5 and Viya 4 (LTS and Stable tracks). Viya 3.5 **revision
+  24w44 (October 2024) or later**, deployed on a supported Linux distribution,
+  holds Standard Support through **October 1, 2027**; older revisions and other
+  platforms fall under Limited Support. Confirm your deployment against SAS's
+  current [Viya support policy](https://support.sas.com/).
 
 ## License
 
