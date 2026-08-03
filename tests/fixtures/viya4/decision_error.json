@@ -1,0 +1,8 @@
+{
+  "version": 2,
+  "httpStatusCode": 404,
+  "errorCode": 4040,
+  "message": "The decision 'abc-123-decision' does not exist.",
+  "details": ["decisionId: abc-123-decision"],
+  "remediation": "Confirm the decision id and that it is published to this environment."
+}

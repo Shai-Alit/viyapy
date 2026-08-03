@@ -36,9 +36,15 @@ class Dialect:
     # -- endpoint paths -----------------------------------------------------
 
     def decision_path(self, decision_id: str) -> str:
+        """Return the relative path for fetching a decision flow's content."""
         return f"/decisions/flows/{decision_id}"
 
     def mas_execute_path(self, module_id: str, step_id: str = DEFAULT_MAS_STEP) -> str:
+        """Return the relative path for executing a MAS module step.
+
+        ``step_id`` defaults to ``"execute"`` (correct for published decisions);
+        pass another value for arbitrary modules exposing named steps.
+        """
         return f"/microanalyticScore/modules/{module_id}/steps/{step_id}"
 
     # -- request building ---------------------------------------------------
@@ -54,6 +60,11 @@ class Dialect:
     # -- response parsing ---------------------------------------------------
 
     def parse_decision(self, decision_id: str, raw: Mapping[str, Any]) -> Decision:
+        """Build a :class:`Decision` from a decision-flow payload.
+
+        Extracts the model steps from ``flow.steps`` (ignoring non-model steps)
+        and retains the full payload on :attr:`Decision.raw`.
+        """
         flow = raw.get("flow")
         steps = flow.get("steps", []) if isinstance(flow, Mapping) else []
         models = tuple(
@@ -71,6 +82,12 @@ class Dialect:
     def parse_execution(
         self, module_id: str, step_id: str, raw: Mapping[str, Any]
     ) -> ExecutionResult:
+        """Build an :class:`ExecutionResult` from a MAS execute payload.
+
+        Flattens the generation's output list (``outputs`` or ``output``) into a
+        ``{name: value}`` mapping. Raises :class:`ViyaResponseError` if no output
+        list is present.
+        """
         outputs = {
             item["name"]: item.get("value")
             for item in self._raw_outputs(raw)

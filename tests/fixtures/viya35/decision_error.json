@@ -1,0 +1,7 @@
+{
+  "version": 1,
+  "httpStatusCode": 404,
+  "errorCode": 4040,
+  "message": "Decision flow not found.",
+  "details": ["decisionId: nope"]
+}

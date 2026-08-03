@@ -69,6 +69,7 @@ class ViyaClient:
 
     @property
     def base_url(self) -> str:
+        """The normalized root URL of the Viya deployment (no trailing slash)."""
         return self._http.base_url
 
     def close(self) -> None:
