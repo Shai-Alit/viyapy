@@ -48,10 +48,10 @@ def type(session: nox.Session) -> None:
 
 @nox.session(python="3.11")
 def audit(session: nox.Session) -> None:
-    """Security + supply-chain checks."""
-    session.install("pip-audit", "bandit")
+    """Security + supply-chain checks (mirrors the Security workflow)."""
+    session.install(".", "pip-audit", "bandit")
     session.run("pip-audit")
-    session.run("bandit", "-r", "src")
+    session.run("bandit", "-r", "src", "--severity-level", "medium", "--confidence-level", "medium")
 
 
 @nox.session(python="3.11")
