@@ -1,0 +1,10 @@
+{
+  "httpStatusCode": 400,
+  "errors": [
+    {
+      "message": "Rule set failed validation.",
+      "errorCode": 90210,
+      "remediation": "Fix the term reference in rule 3."
+    }
+  ]
+}

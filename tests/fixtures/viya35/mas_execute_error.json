@@ -1,0 +1,7 @@
+{
+  "version": 1,
+  "httpStatusCode": 404,
+  "errorCode": 5113,
+  "message": "Module or step not found.",
+  "details": ["moduleId: gone"]
+}

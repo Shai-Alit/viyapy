@@ -1,0 +1,9 @@
+{
+  "timestamp": "2026-06-15T12:00:00.000Z",
+  "status": 400,
+  "error": {
+    "message": "Invalid request payload.",
+    "errorCode": 400013,
+    "details": ["inputs must be a non-empty array"]
+  }
+}

@@ -1,0 +1,7 @@
+{
+  "version": 2,
+  "httpStatusCode": 429,
+  "errorCode": 4290,
+  "message": "Too many requests.",
+  "details": ["limit: 100 requests per minute"]
+}
