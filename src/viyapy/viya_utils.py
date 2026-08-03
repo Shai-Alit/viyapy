@@ -7,6 +7,17 @@ Created on Thu Jun  9 11:27:11 2022
 import requests
 import urllib
 import json
+import warnings as _warnings
+
+# This flat module is the legacy 2.x API, retained only for backward
+# compatibility. It is deprecated and will be removed in viyapy 4.0; migrate to
+# viyapy.ViyaClient (see MIGRATION.md), or viyapy.compat for warned drop-ins.
+_warnings.warn(
+    "viyapy.viya_utils is deprecated and will be removed in viyapy 4.0; "
+    "use viyapy.ViyaClient (see MIGRATION.md).",
+    DeprecationWarning,
+    stacklevel=2,
+)
 
 #custom post that provides Viya authentication (OAuth2) with http request
 #Note - requires an admin to create a token for user
