@@ -15,6 +15,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   context manager, and redacts the token in `repr`.
 - `HttpClient.request_json` helper that raises `ViyaResponseError` when a 2xx
   response body is not JSON, or is JSON that is not an object.
+- Boundary validation of identifiers: `decisions.get`/`list_models` and
+  `mas.execute` raise `ViyaConfigError` for an empty or non-string
+  `decision_id`, `module_id`, or `step` before any request is issued.
 
 - Domain dataclasses `Decision`, `ModelStep`, and `ExecutionResult` (exported
   from the package root), each retaining its raw payload on `.raw`.

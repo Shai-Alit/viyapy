@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from ._http import HttpClient
+from ._validation import require_identifier
 from .dialects.base import Dialect
 from .models import Decision, ModelStep
 
@@ -24,9 +25,11 @@ class DecisionsAPI:
             The parsed :class:`Decision`.
 
         Raises:
+            ViyaConfigError: ``decision_id`` is empty or not a string.
             ViyaNotFoundError: No decision with that id exists.
             ViyaError: On any other failure.
         """
+        decision_id = require_identifier(decision_id, "decision_id")
         raw = self._http.request_json(
             "GET",
             self._dialect.decision_path(decision_id),
@@ -35,5 +38,10 @@ class DecisionsAPI:
         return self._dialect.parse_decision(decision_id, raw)
 
     def list_models(self, decision_id: str) -> tuple[ModelStep, ...]:
-        """Return the model steps contained in a decision flow."""
+        """Return the model steps contained in a decision flow.
+
+        Convenience wrapper over :meth:`get`; it issues a fresh request each
+        call and does not cache. Call :meth:`get` once and reuse the returned
+        :class:`Decision` if you need the flow and its models together.
+        """
         return self.get(decision_id).models
