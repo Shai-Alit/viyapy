@@ -13,6 +13,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   started, authentication, decisions, MAS execution, error handling, and 2.x→3.x
   migration, plus an autodoc API reference generated from the docstrings. A
   rewritten README and an enforced docstring gate (ruff pydocstyle) accompany it.
+- Project-governance files (`CONTRIBUTING.md`, `SECURITY.md`,
+  `CODE_OF_CONDUCT.md`, and GitHub issue/PR templates) and runnable `examples/`
+  scripts that are import- and mock-run-tested in CI so they can't drift.
 
 - `ViyaClient` — the public entry point wiring the HTTP layer to a version
   dialect, with `client.decisions` (`get`, `list_models`) and `client.mas`
