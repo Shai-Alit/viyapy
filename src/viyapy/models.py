@@ -70,4 +70,5 @@ class ExecutionResult:
         return key in self.outputs
 
     def get(self, key: str, default: Any = None) -> Any:
+        """Return output ``key``, or ``default`` if it is absent."""
         return self.outputs.get(key, default)
