@@ -1,0 +1,8 @@
+{
+  "version": 2,
+  "httpStatusCode": 403,
+  "errorCode": 4090,
+  "message": "Insufficient scope to read this decision.",
+  "details": ["required scope: Decisions.Read"],
+  "remediation": "Request the Decisions.Read scope for your token."
+}

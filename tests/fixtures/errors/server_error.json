@@ -1,0 +1,7 @@
+{
+  "version": 2,
+  "httpStatusCode": 500,
+  "errorCode": 5000,
+  "message": "Internal server error.",
+  "details": []
+}

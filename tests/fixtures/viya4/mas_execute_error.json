@@ -1,0 +1,12 @@
+{
+  "version": 2,
+  "httpStatusCode": 404,
+  "errorCode": 5113,
+  "message": "The module step 'execute' was not found in module 'api_tester1_0'.",
+  "details": [
+    "traceId: 0af7651916cd43dd8448eb211c80319c",
+    "path: /microanalyticScore/modules/api_tester1_0/steps/execute"
+  ],
+  "remediation": "Verify the module is published and exposes an 'execute' step.",
+  "links": []
+}
