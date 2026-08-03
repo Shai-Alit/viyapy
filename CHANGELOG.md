@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- CI/CD automation (GitHub Actions): a `CI` workflow (ruff lint/format, mypy
+  `--strict`, and a pytest matrix across Python 3.9–3.13 with the coverage gate),
+  a `Docs` workflow that builds strictly on PRs and deploys to GitHub Pages from
+  main, and a `Security` workflow (pip-audit, bandit, gitleaks secret scan, and a
+  CycloneDX SBOM artifact) on PRs, pushes, and a weekly schedule. All actions are
+  SHA-pinned with least-privilege permissions.
 - Documentation site (MkDocs Material + mkdocstrings): guides for getting
   started, authentication, decisions, MAS execution, error handling, and 2.x→3.x
   migration, plus an autodoc API reference generated from the docstrings. A
