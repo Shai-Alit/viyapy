@@ -26,6 +26,7 @@ from viyapy.exceptions import (
     ViyaConnectionError,
     ViyaNotFoundError,
     ViyaRateLimitError,
+    ViyaResponseError,
     ViyaSecurityWarning,
     ViyaServerError,
     ViyaTimeoutError,
@@ -387,3 +388,19 @@ def test_bounded_retry_passes_through_absent_retry_after() -> None:
 
 def test_correlation_id_absent_is_none() -> None:
     assert _correlation_id({}) is None
+
+
+# -- request_json -----------------------------------------------------------
+
+
+@responses.activate
+def test_request_json_returns_parsed_body() -> None:
+    responses.add(responses.GET, f"{BASE}/x", json={"a": 1}, status=200)
+    assert make_client().request_json("GET", "/x") == {"a": 1}
+
+
+@responses.activate
+def test_request_json_on_non_json_2xx_raises_response_error() -> None:
+    responses.add(responses.GET, f"{BASE}/x", body="<html>nope</html>", status=200)
+    with pytest.raises(ViyaResponseError):
+        make_client().request_json("GET", "/x")
