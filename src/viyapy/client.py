@@ -20,9 +20,10 @@ class ViyaClient:
     Args:
         base_url: Root URL of the Viya deployment, e.g. ``https://viya.example.com``.
         token: OAuth2 bearer token.
-        viya_version: ``"3.5"``/``"4"`` or an explicit :class:`Dialect`
-            (default: Viya 4). Selects endpoint paths, media types, and the
-            ``output`` vs ``outputs`` response handling.
+        viya_version: ``"3.5"``/``"4"`` or an explicit :class:`Dialect`.
+            ``None`` (the default) resolves to the library default generation
+            (Viya 4). Selects endpoint paths, media types, and the ``output``
+            vs ``outputs`` response handling.
         timeout: ``(connect, read)`` seconds, or a single positive float.
         verify: TLS verification — ``True``, ``False``, or a CA-bundle path.
         max_retries: Retry budget for transient failures.
@@ -44,7 +45,7 @@ class ViyaClient:
         base_url: str,
         token: str,
         *,
-        viya_version: str | Dialect = "4",
+        viya_version: str | Dialect | None = None,
         timeout: float | tuple[float, float] = DEFAULT_TIMEOUT,
         verify: bool | str = True,
         max_retries: int = DEFAULT_MAX_RETRIES,
