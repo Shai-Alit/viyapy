@@ -86,10 +86,12 @@ result.raw              # the raw response dict, if you still need it
 ### `unpack_viya_outputs(response)`
 
 ```python
-# 2.x
+# 2.x — unpacked an already-obtained response
 outputs = unpack_viya_outputs(resp)
 
-# 3.x — already flattened on the result
-outputs = client.mas.execute(module_id, inputs).outputs
+# 3.x — the outputs are already on the ExecutionResult; reuse the single
+# execution rather than calling execute() again (it is not idempotent):
+result = client.mas.execute(module_id, inputs)
+outputs = result.outputs
 ```
 
