@@ -364,3 +364,98 @@ The library is "production ready" when:
 - a documented site with API reference, guides, and a 2.x→3.x migration guide is published and built in CI;
 - releases are automated via a tagged, OIDC trusted-publish workflow with an install smoke test, and changelog/dependency updates are automated;
 - the 2.x flat API still works behind deprecation warnings.
+
+---
+
+## 10. Phase 5+ — Feature expansion (post-3.0)
+
+With 3.0 hardened, the goal shifts to breadth: grow viyapy from a focused
+read-and-execute client into a fully featured, premiere Intelligent Decisioning
+client. **Decided:** execution-first emphasis; ship as additive SemVer **minors**
+(3.1, 3.2, …); scope covers MAS depth, Decisions lifecycle, Business Rules,
+Publishing & batch scoring, and CAS depth. Every phase uses the **same flow** as
+0–4 (stacked slices, dual AI review, sandbox-green gate, docs/examples/CHANGELOG,
+and growing `contracts/` so the §7.6 drift gate keeps protecting the surface).
+Grounded in the SAS REST reference (MAS, `/decisions/flows`,
+`/businessRules/ruleSets`, `modelPublish`, `casManagement`).
+
+**Design principles.** Typed frozen model per resource (`.raw` escape hatch);
+`client.<area>` operation groups (`mas`, `decisions`, new `rules`, `publishing`,
+`cas`); reads before writes within each area; three build-once/reuse foundations
+— a **pagination iterator** (Phase 5.1), a **revision/lock mixin** (5.3→5.4), and
+a **long-running job poller** (5.2→5.6→5.7).
+
+### Phase 5.1 — MAS introspection & validation (release 3.1)
+
+List/get modules (`GET /microanalyticScore/modules[/{id}]`), step **signatures**
+(`GET .../steps/{step}`), **client-side** input validation against the signature
+(new `ViyaValidationError`), and optional **server-side** validation
+(`POST /microanalyticScore/commons/validations/...`). Models: `MasModule`,
+`StepSignature`, `Variable(name,type,dim,size)`. Introduces the pagination
+iterator. Low-risk, high-leverage for current users. *Slices: 5.1a pagination +
+list/get; 5.1b signatures; 5.1c client validation; 5.1d server validation.*
+
+### Phase 5.2 — MAS execution modes, binary I/O & module mgmt (release 3.2)
+
+`waitTime` sync / fire-and-forget / timeout modes; binary (`encoding: b64`)
+in/out; execution `metadata` (`client_id`/`transaction_id`); create/update/delete
+modules and read `source`; async compile jobs (`POST /microanalyticScore/jobs`)
+with the reusable **job poller**. *Slices: 5.2a wait modes; 5.2b binary+metadata;
+5.2c module CRUD+source; 5.2d async compile jobs.*
+
+### Phase 5.3 — Decisions read & revisions (release 3.3)
+
+`GET /decisions/flows` (list), revisions + current revision, generated DS2
+`code`/`mappedCode`, external artifacts. Introduces the **revision/lock mixin**.
+Models: `DecisionSummary`, `Revision`. *Slices: 5.3a list; 5.3b revisions+mixin;
+5.3c code retrieval; 5.3d external artifacts.*
+
+### Phase 5.4 — Decisions authoring (release 3.4)
+
+Create/update/delete flows, revision lock/unlock, reusable `codeFiles`, and a
+typed **decision-flow builder** (model / ruleset / branch / code-file / treatment
+steps) so users compose flows without hand-writing SAS JSON. Biggest single
+effort; validated against per-generation fixtures and pinned via `contracts/`.
+*Slices: 5.4a simple create/update/delete; 5.4b flow builder; 5.4c code files;
+5.4d revision locking.*
+
+### Phase 5.5 — Business Rules (release 3.5)
+
+Rulesets + rules CRUD with revisions/locking (`/businessRules/ruleSets`), wired
+into the Phase 5.4 builder. *Slices: 5.5a rulesets read; 5.5b rulesets
+write+revisions; 5.5c rules CRUD; 5.5d builder integration.*
+
+### Phase 5.6 — Publishing (release 3.6)
+
+List publishing **destinations** and publish decisions/rulesets/modules to
+runtime (maslocal/CAS), with publish-job polling (`modelPublish` service; exact
+paths confirmed against a live deployment and pinned in `contracts/`). *Slices:
+5.6a destinations; 5.6b publish→maslocal+poll; 5.6c publish→CAS; 5.6d status.*
+
+### Phase 5.7 — CAS depth & batch scoring (release 3.7)
+
+High-volume batch scoring against CAS tables via a published decision: caslib/
+table discovery, load/promote to memory, `score_table`, result fetch. Caps the
+"fully featured" goal. *Slices: 5.7a discovery; 5.7b load/promote; 5.7c batch
+score+poll; 5.7d result fetch.*
+
+### Open decisions (settle at the top of the relevant phase)
+
+- **CAS access strategy (5.7):** prefer pure-`requests` CAS REST
+  (`casManagement` + REST-triggered scoring) to keep viyapy dependency-light;
+  only add an optional `viyapy[cas]` extra (pulling `swat`) if REST can't cover
+  batch scoring cleanly. Decide after a spike.
+- **Decision-flow builder scope (5.4):** how much flow grammar to model as typed
+  objects vs accept as raw JSON initially.
+- **Client-side validation strictness (5.1):** warn vs raise by default.
+- **Publish endpoint specifics (5.6):** confirm exact `modelPublish`/decision
+  publish paths on a live deployment; pin in `contracts/`.
+- **Auth scopes:** document the SAS scopes each new area needs so `ViyaAuthError`
+  guidance stays actionable.
+
+### Public roadmap posture
+
+The detailed plan above stays here (internal engineering doc). If/when a public
+roadmap is wanted, publish a **trimmed, outcome-only** page on the docs site
+(phase goals + priority, **no dates**, "directional, subject to change") — ideally
+once 3.1 has shipped so it launches with momentum rather than promises.
