@@ -111,6 +111,8 @@ convention = "google"
 "noxfile.py" = ["T20", "D"]
 # Example scripts are CLI programs: printing to stdout is their purpose.
 "examples/**" = ["T20"]
+# Maintenance scripts print their reports to stdout.
+"scripts/**" = ["T20"]
 
 [tool.ruff.lint.isort]
 known-first-party = ["viyapy"]

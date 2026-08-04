@@ -1,0 +1,27 @@
+# Declared REST footprint viyapy depends on for SAS Viya 4.
+#
+# scripts/check_api_drift.py asserts the Viya4Dialect and the recorded fixtures
+# still match this contract. If SAS changes an endpoint or response shape, update
+# this file together with the dialect code and the tests/fixtures/viya4 payloads
+# — the checker fails if they diverge.
+generation: viya4
+dialect: Viya4Dialect
+fixtures: viya4
+reference: https://developer.sas.com/rest-apis
+model_step_type: application/vnd.sas.decision.step.model
+
+endpoints:
+  - id: get_decision_content
+    method: GET
+    path: /decisions/flows/{decision_id}
+    accept: application/vnd.sas.decision+json
+    # Fields the client reads off the decision payload (dotted = nested).
+    response_fields: [name, flow.steps]
+
+  - id: execute_mas_step
+    method: POST
+    path: /microanalyticScore/modules/{module_id}/steps/{step_id}
+    request_fields: [inputs]
+    # Viya 4 returns synchronous results under `outputs`.
+    outputs_key: outputs
+    response_fields: [executionState, moduleId, stepId]
