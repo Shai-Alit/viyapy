@@ -36,10 +36,15 @@ FIXTURES_DIR = REPO_ROOT / "tests" / "fixtures"
 # Import the package from the source tree without requiring an install.
 sys.path.insert(0, str(REPO_ROOT / "src"))
 import viyapy.dialects as dialects  # noqa: E402  (path set up above)
+from viyapy.dialects.base import MODEL_STEP_TYPE  # noqa: E402
 
 _ID = "__ID__"
 _MODULE = "__MODULE__"
 _STEP = "__STEP__"
+
+# Every generation must declare these endpoints; the checker fails if one is
+# missing so a deleted entry can't silently pass the gate.
+REQUIRED_ENDPOINTS = ("get_decision_content", "execute_mas_step")
 
 
 def _load_yaml(path: Path) -> dict[str, Any]:
@@ -69,6 +74,20 @@ def _check_generation(name: str, entry: dict[str, Any], problems: list[str]) -> 
         return
     contract = _load_yaml(contract_path)
 
+    # The contract's self-declared generation must match the key it's filed under.
+    if contract.get("generation") != name:
+        problems.append(
+            f"{tag} contract generation {contract.get('generation')!r} "
+            f"!= supported_viya.yaml key {name!r}"
+        )
+    # model_step_type is compared directly to the code constant, not just used in
+    # a message, so a stale contract value is caught even if a fixture is updated.
+    if contract.get("model_step_type") != MODEL_STEP_TYPE:
+        problems.append(
+            f"{tag} model_step_type {contract.get('model_step_type')!r} "
+            f"!= code constant {MODEL_STEP_TYPE!r}"
+        )
+
     dialect_cls = getattr(dialects, contract["dialect"], None)
     if dialect_cls is None:
         problems.append(f"{tag} dialect class {contract['dialect']!r} not found in viyapy.dialects")
@@ -76,6 +95,9 @@ def _check_generation(name: str, entry: dict[str, Any], problems: list[str]) -> 
     dialect = dialect_cls()
 
     endpoints = {ep["id"]: ep for ep in contract["endpoints"]}
+    for required in REQUIRED_ENDPOINTS:
+        if required not in endpoints:
+            problems.append(f"{tag} contract is missing required endpoint {required!r}")
 
     # -- decision endpoint: path + media type -------------------------------
     dec = endpoints.get("get_decision_content")
@@ -126,34 +148,44 @@ def _check_fixtures(
 
     mas_ep = endpoints.get("execute_mas_step")
     mas_file = fixtures / "mas_execute_ok.json"
-    if mas_ep and mas_file.exists():
-        raw = _load_json(mas_file)
-        # The generation's declared output key must actually be the one present.
-        if mas_ep["outputs_key"] not in raw:
-            problems.append(
-                f"{tag} fixture {mas_file.name} has no {mas_ep['outputs_key']!r} key "
-                f"— output shape drifted from the contract"
-            )
-        for field in mas_ep.get("response_fields", []):
-            if not _has_path(raw, field):
-                problems.append(f"{tag} fixture {mas_file.name} missing response field {field!r}")
-        result = dialect.parse_execution(_MODULE, _STEP, raw)
-        if not result.outputs:
-            problems.append(f"{tag} {mas_file.name}: parser produced no outputs")
+    if mas_ep:
+        if not mas_file.exists():
+            problems.append(f"{tag} missing fixture {mas_file.relative_to(REPO_ROOT)}")
+        else:
+            raw = _load_json(mas_file)
+            # The generation's declared output key must actually be the one present.
+            if mas_ep["outputs_key"] not in raw:
+                problems.append(
+                    f"{tag} fixture {mas_file.name} has no {mas_ep['outputs_key']!r} key "
+                    f"— output shape drifted from the contract"
+                )
+            for field in mas_ep.get("response_fields", []):
+                if not _has_path(raw, field):
+                    problems.append(
+                        f"{tag} fixture {mas_file.name} missing response field {field!r}"
+                    )
+            result = dialect.parse_execution(_MODULE, _STEP, raw)
+            if not result.outputs:
+                problems.append(f"{tag} {mas_file.name}: parser produced no outputs")
 
     dec_ep = endpoints.get("get_decision_content")
     dec_file = fixtures / "decision_content.json"
-    if dec_ep and dec_file.exists():
-        raw = _load_json(dec_file)
-        for field in dec_ep.get("response_fields", []):
-            if not _has_path(raw, field):
-                problems.append(f"{tag} fixture {dec_file.name} missing response field {field!r}")
-        parsed = dialect.parse_decision(_ID, raw)
-        if not parsed.models:
-            problems.append(
-                f"{tag} {dec_file.name}: no model steps parsed — check model_step_type "
-                f"({contract.get('model_step_type')!r})"
-            )
+    if dec_ep:
+        if not dec_file.exists():
+            problems.append(f"{tag} missing fixture {dec_file.relative_to(REPO_ROOT)}")
+        else:
+            raw = _load_json(dec_file)
+            for field in dec_ep.get("response_fields", []):
+                if not _has_path(raw, field):
+                    problems.append(
+                        f"{tag} fixture {dec_file.name} missing response field {field!r}"
+                    )
+            parsed = dialect.parse_decision(_ID, raw)
+            if not parsed.models:
+                problems.append(
+                    f"{tag} {dec_file.name}: no model steps parsed — check model_step_type "
+                    f"({contract.get('model_step_type')!r})"
+                )
 
 
 def check_all() -> list[str]:
