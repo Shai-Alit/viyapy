@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- API-drift detection: `supported_viya.yaml` (the Viya 4 Stable/LTS + Viya 3.5
+  support matrix) and per-generation `contracts/*.yaml` declaring the REST
+  endpoints and response shapes viyapy depends on, enforced by
+  `scripts/check_api_drift.py` (run in the test suite and by an `API Drift`
+  workflow) so any divergence between the contracts, the dialect code, and the
+  captured fixtures fails CI. Because SAS publishes no machine-diffable specs,
+  the workflow also opens a monthly maintainer issue to review new SAS releases.
 - CI/CD automation (GitHub Actions): a `CI` workflow (ruff lint/format, mypy
   `--strict`, and a pytest matrix across Python 3.9–3.13 with the coverage gate),
   a `Docs` workflow that builds strictly on PRs and deploys to GitHub Pages from

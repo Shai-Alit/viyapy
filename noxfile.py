@@ -27,16 +27,16 @@ def test(session: nox.Session) -> None:
 def lint(session: nox.Session) -> None:
     """Lint and check formatting with ruff."""
     session.install("ruff>=0.5")
-    session.run("ruff", "check", "src", "tests", "examples", "noxfile.py")
-    session.run("ruff", "format", "--check", "src", "tests", "examples", "noxfile.py")
+    session.run("ruff", "check", "src", "tests", "examples", "scripts", "noxfile.py")
+    session.run("ruff", "format", "--check", "src", "tests", "examples", "scripts", "noxfile.py")
 
 
 @nox.session(python="3.11")
 def format(session: nox.Session) -> None:
     """Auto-format the codebase with ruff."""
     session.install("ruff>=0.5")
-    session.run("ruff", "format", "src", "tests", "examples", "noxfile.py")
-    session.run("ruff", "check", "--fix", "src", "tests", "examples", "noxfile.py")
+    session.run("ruff", "format", "src", "tests", "examples", "scripts", "noxfile.py")
+    session.run("ruff", "check", "--fix", "src", "tests", "examples", "scripts", "noxfile.py")
 
 
 @nox.session(python="3.11")
@@ -52,6 +52,13 @@ def audit(session: nox.Session) -> None:
     session.install("pip-audit", "bandit")
     session.run("pip-audit", ".")
     session.run("bandit", "-r", "src", "--severity-level", "high", "--confidence-level", "medium")
+
+
+@nox.session(python="3.11")
+def drift(session: nox.Session) -> None:
+    """Check the declared API contracts against the dialects and fixtures."""
+    session.install(".", "pyyaml")
+    session.run("python", "scripts/check_api_drift.py")
 
 
 @nox.session(python="3.11")
