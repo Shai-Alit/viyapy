@@ -1,0 +1,63 @@
+name: Release
+
+# Publish to PyPI when a version tag is pushed. Uses PyPI Trusted Publishing
+# (OIDC) — no API token is stored anywhere; PyPI verifies this workflow's
+# identity. Configure the trusted publisher on PyPI once (see RELEASING.md).
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+
+jobs:
+  release:
+    name: Build, verify, and publish to PyPI
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/p/viyapy
+    permissions:
+      contents: read
+      id-token: write # required for Trusted Publishing (OIDC)
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+        with:
+          python-version: "3.11"
+
+      - name: Build sdist + wheel
+        run: |
+          python -m pip install --upgrade pip build twine
+          python -m build
+
+      - name: Check metadata
+        run: twine check dist/*
+
+      - name: Fail if the tag and package version disagree
+        # The git tag (vX.Y.Z) must match the built version, or we would publish
+        # a release under the wrong number.
+        run: |
+          TAG="${GITHUB_REF_NAME#v}"
+          PKG="$(ls dist/*.whl | sed -E 's/.*viyapy-([^-]+)-.*/\1/')"
+          echo "tag=$TAG built=$PKG"
+          test "$TAG" = "$PKG"
+
+      - name: Smoke-install the wheel in a clean venv
+        run: |
+          python -m venv /tmp/smoke
+          /tmp/smoke/bin/pip install --upgrade pip
+          /tmp/smoke/bin/pip install dist/*.whl
+          /tmp/smoke/bin/python -c "import viyapy; print('import OK:', viyapy.__version__)"
+
+      - name: Publish to PyPI (Trusted Publishing)
+        # Pinned to a tag because the GitHub API was unavailable to resolve the
+        # commit SHA at authoring time; Dependabot (github-actions) will pin it
+        # to a SHA on its next run.
+        uses: pypa/gh-action-pypi-publish@v1.12.4
+        with:
+          print-hash: true
