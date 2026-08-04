@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.0.0] - 2026-08-03
+
+First release of the rewritten library. A clean break from the 2.x flat API;
+see `MIGRATION.md`.
+
 ### Added
 
 - API-drift detection: `supported_viya.yaml` (the Viya 4 Stable/LTS + Viya 3.5
@@ -92,3 +97,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   to migrate, 3.0 is a clean break rather than a deprecation cycle; port scripts
   to `ViyaClient` using `MIGRATION.md`.
 - Legacy script-style tests that required a live Viya server and `keyring`.
+
+[Unreleased]: https://github.com/Shai-Alit/viyapy/compare/v3.0.0...HEAD
+[3.0.0]: https://github.com/Shai-Alit/viyapy/releases/tag/v3.0.0

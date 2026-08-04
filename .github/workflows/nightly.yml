@@ -1,0 +1,36 @@
+name: Nightly
+
+# Runs the suite nightly against the latest published dependencies (no lock
+# file), so a breaking release in requests/urllib3 surfaces here rather than in
+# a user's environment. Boundary Python versions only — enough to catch drift.
+on:
+  schedule:
+    - cron: "0 7 * * *" # 07:00 UTC daily
+  workflow_dispatch:
+
+concurrency:
+  group: nightly-${{ github.workflow }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Test (py${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.9", "3.13"]
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Install package + dev deps (latest)
+        run: python -m pip install --upgrade pip && python -m pip install -e ".[dev]"
+      - name: Run tests
+        run: pytest

@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "viyapy"
-version = "3.0.0.dev0"
+version = "3.0.0"
 description = "A Python client for SAS Viya Intelligent Decisioning (Decisions + Micro Analytic Score) supporting Viya 3.5 and Viya 4."
 readme = "README.md"
 requires-python = ">=3.9"
@@ -12,7 +12,7 @@ license = { file = "LICENSE" }
 authors = [{ name = "Sean Ford", email = "psuaerofighter@gmail.com" }]
 keywords = ["sas", "viya", "intelligent decisioning", "decisions", "mas", "microanalytic", "scoring"]
 classifiers = [
-    "Development Status :: 3 - Alpha",
+    "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
     "License :: OSI Approved :: MIT License",
     "Operating System :: OS Independent",
