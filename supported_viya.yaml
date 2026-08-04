@@ -1,0 +1,40 @@
+# SAS Viya releases viyapy is built and tested against.
+#
+# This is the source of truth for the support matrix shown in the docs and the
+# anchor for the API-drift job (.github/workflows/api-drift.yml). SAS does not
+# publish versioned, machine-diffable OpenAPI specs, so upstream drift can't be
+# detected automatically — instead the drift job runs the internal contract
+# check (scripts/check_api_drift.py) as a hard gate and, on a schedule, opens a
+# maintainer issue to review each new SAS release against contracts/ by hand.
+#
+# When SAS ships a new Stable/LTS: review its Decisions + MAS release notes
+# against contracts/, then bump `last_reviewed` and the releases below.
+last_reviewed: "2026-08-03"
+
+generations:
+  viya4:
+    dialect: Viya4Dialect
+    contract: contracts/viya4.yaml
+    reference: https://developer.sas.com/rest-apis
+    # Viya 4 is date-versioned (yyyy.mm): Stable monthly, LTS every 6 months.
+    releases:
+      - version: "2026.07"
+        channel: stable
+        status: current
+      - version: "2026.03"
+        channel: lts
+        status: current
+      - version: "2025.09"
+        channel: lts
+        status: previous
+
+  viya35:
+    dialect: Viya35Dialect
+    contract: contracts/viya35.yaml
+    reference: https://go.documentation.sas.com/doc/en/calcdc/3.5/calmicroanalyticref/home.htm
+    # Frozen generation: no new API revisions expected.
+    releases:
+      - version: "3.5"
+        channel: lts
+        status: frozen
+        note: Standard Support through Oct 2027; REST surface is frozen.
