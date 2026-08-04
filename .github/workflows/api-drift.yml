@@ -77,7 +77,11 @@ jobs:
             cat supported_viya.yaml
             echo '```'
           } > "$BODY_FILE"
-          EXISTING="$(gh issue list --state open --search "in:title $TITLE" --json number --jq '.[0].number // empty')"
+          # Fetch candidates, then match the title exactly in jq (gh's --jq has
+          # no --arg and defaults to 30 results, which risks false matches).
+          EXISTING="$(gh issue list --state open --search "in:title \"$TITLE\"" --limit 100 \
+            --json number,title \
+            | jq --arg t "$TITLE" 'map(select(.title == $t)) | first | .number // empty')"
           if [ -n "$EXISTING" ]; then
             gh issue comment "$EXISTING" --body-file "$BODY_FILE"
           else
