@@ -34,6 +34,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   usable string `id`, instead of returning a `MasModule` with a false identity
   (e.g. the literal `"None"`).
 
+### Removed
+
+- Dropped support for Python 3.9 (end-of-life October 2025); the minimum
+  supported version is now Python 3.10. `requires-python`, the CI/nightly
+  matrices, and the ruff/mypy target versions are updated accordingly.
+
 ## [3.0.0] - 2026-08-03
 
 First release of the rewritten library. A clean break from the 2.x flat API;

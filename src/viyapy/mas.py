@@ -26,20 +26,29 @@ class MASClient:
 
         Pages are fetched lazily as the iterator is consumed (following the
         collection's ``next`` links), so a large deployment is streamed rather
-        than buffered.
+        than buffered. ``page_size`` is validated eagerly, when this method is
+        called, so a bad value fails fast at the call site rather than on the
+        first iteration.
 
         Args:
             page_size: Number of modules requested per page. Larger pages mean
                 fewer round trips; the server may cap the effective size.
 
-        Yields:
-            Each :class:`MasModule`, in server order.
+        Returns:
+            An iterator over each :class:`MasModule`, in server order.
 
         Raises:
             ViyaConfigError: ``page_size`` is not a positive integer.
             ViyaError: On any request failure while paging.
         """
+        # Validate eagerly here (not in the generator below): a generator
+        # function defers its whole body until first iteration, which would
+        # postpone this check and defeat the fail-fast contract.
         require_positive_int(page_size, "page_size")
+        return self._iter_modules(page_size)
+
+    def _iter_modules(self, page_size: int) -> Iterator[MasModule]:
+        """Lazily page through the MAS module collection (see :meth:`list`)."""
         items = iter_collection(
             self._http,
             self._dialect.mas_modules_path(),

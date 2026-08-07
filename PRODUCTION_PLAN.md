@@ -140,7 +140,7 @@ Backward-compatibility: `viyapy.viya_utils.call_id_api(...)` still works, emits 
 ## 3. Workstreams
 
 ### Phase 0 — Baseline & scaffolding (0.5 day)
-1. Pin toolchain: adopt `pyproject.toml` as the single source of truth (move metadata out of `setup.cfg`; keep `setup.cfg` only if needed). Declare `requests` as a runtime dependency and set `requires-python = ">=3.9"`.
+1. Pin toolchain: adopt `pyproject.toml` as the single source of truth (move metadata out of `setup.cfg`; keep `setup.cfg` only if needed). Declare `requests` as a runtime dependency and set `requires-python = ">=3.10"`.
 2. Add dev tooling config: `ruff` (lint + format), `mypy` (strict), `pytest`, `pytest-cov`, `responses`/`respx` for HTTP mocking, `pre-commit`.
 3. Add `py.typed`, `src`-layout confirmation, and editor/CI-friendly `Makefile` or `tox`/`nox` sessions (`lint`, `type`, `test`, `docs`, `build`).
 
@@ -166,7 +166,7 @@ Backward-compatibility: `viyapy.viya_utils.call_id_api(...)` still works, emits 
 18. `CHANGELOG.md` (Keep a Changelog), `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, `SECURITY.md`, issue/PR templates.
 
 ### Phase 4 — CI/CD, automation & release (1–1.5 days) — see §7
-19. GitHub Actions CI: matrix across Python 3.9–3.13 (and `os: [ubuntu, windows, macos]` for the lowest/highest versions) running lint → type → test → coverage upload, plus a docs build. Actions pinned to full commit SHAs; `permissions:` set to least privilege; `concurrency` to cancel superseded runs.
+19. GitHub Actions CI: matrix across Python 3.10–3.13 (and `os: [ubuntu, windows, macos]` for the lowest/highest versions) running lint → type → test → coverage upload, plus a docs build. Actions pinned to full commit SHAs; `permissions:` set to least privilege; `concurrency` to cancel superseded runs.
 20. Security & supply-chain automation: `pip-audit` and `bandit` jobs, `gitleaks`/secret scanning, and a generated SBOM. Fail CI on new high-severity findings.
 21. Build/publish workflow using trusted publishing (OIDC) to PyPI on tag — no long-lived API tokens; build sdist + wheel with `python -m build`; verify with `twine check` and a clean-venv `pip install` smoke test.
 22. Maintenance automation: Dependabot/Renovate for deps + Actions, `pre-commit.ci` autofixes, Release Drafter (or towncrier) for changelog, CODEOWNERS, and a scheduled nightly job that reruns the suite (and optional live integration) to catch upstream/Viya drift early.
@@ -282,7 +282,7 @@ The library should stay healthy with minimal manual effort, so contribution and 
 `pre-commit` runs `ruff` (lint + format), `mypy`, end-of-file/whitespace fixers, and a fast unit-test subset before every commit, so most issues never reach CI. The same commands are exposed as `nox`/`tox` sessions (`lint`, `type`, `test`, `docs`, `build`, `audit`) so local and CI runs are identical and reproducible.
 
 ### 7.2 Continuous integration (GitHub Actions)
-- **`ci.yml`** on every push/PR: `lint → type → test` across the Python matrix (3.9–3.13), cross-OS for the boundary versions, coverage uploaded to Codecov with a PR status and a ≥90% floor.
+- **`ci.yml`** on every push/PR: `lint → type → test` across the Python matrix (3.10–3.13), cross-OS for the boundary versions, coverage uploaded to Codecov with a PR status and a ≥90% floor.
 - **`docs.yml`**: build the docs on every PR (fail on warnings), deploy to GitHub Pages / Read the Docs on merge to main.
 - **`security.yml`**: `pip-audit`, `bandit`, and secret scanning; runs on PR and on a weekly schedule so newly disclosed CVEs surface even without a commit.
 - **Hardening of the pipeline itself**: actions pinned to commit SHAs (not tags), workflow `permissions:` least-privilege, `concurrency` groups to cancel superseded runs, and required-status-check branch protection on main.
@@ -343,7 +343,7 @@ All work follows trunk-based development with short-lived branches and mandatory
 
 ## 8. Risks & decisions to confirm
 
-- **Auth model.** ~~Current design assumes a pre-minted bearer token created by an admin.~~ **Resolved (Phase 2, slice 2d):** auth is now a pluggable callable. `ViyaClient` accepts either a static `token` or an `auth` token provider (`TokenProvider = Callable[[], str]`), called per request, so a provider that refreshes internally rotates the token transparently. Only the static-token path ships now; concrete client-credentials/OAuth flows, token refresh/caching, and credential-source discovery are scheduled as **Phase 6** (§11, releases 3.8–3.10) and slot in as new providers behind this same seam without an API break.
+- **Auth model.** ~~Current design assumes a pre-minted bearer token created by an admin.~~ **Resolved (Phase 2, slice 2d):** auth is now a pluggable callable. `ViyaClient` accepts either a static `token` or an `auth` token provider (`TokenProvider = Callable[[], str]`), called per request, so a provider that refreshes internally rotates the token transparently. The only built-in provider that ships now is the static-token path, but the seam is public: callers can already supply their own custom callable provider today. Concrete client-credentials/OAuth flows, token refresh/caching, and credential-source discovery are scheduled as **Phase 6** (§11, releases 3.8–3.10) and slot in as additional built-in providers behind this same seam without an API break.
 - **Viya version coverage (decided: support both generations — see §1.5).** v3 supports Viya 3.5 (Standard Support for qualifying Linux deployments through Oct 1, 2027) and Viya 4 across its LTS and Stable tracks, via the dialect layer (§2), a version-matrix test suite (§4), and matrix-aware drift detection (§7.6). **Live-access status (Phase 2):** the maintainer has a live **Viya 4** instance, so the Viya 4 integration/live-probe tier is built to run (opt-in via `VIYAPY_TEST_4_*`); the **Viya 3.5** tier ships as a skipped scaffold (`VIYAPY_TEST_35_*`) until a 3.5 instance is available. **Still needed:** the exact list of Viya 4 LTS/Stable versions to certify against and populate `supported_viya.yaml` with (for the §7.6 drift job in Phase 4).
 - **Breaking change comms.** ~~Since 2.0.0 is on PyPI, the deprecation shim + a clear migration guide are essential to avoid stranding existing users.~~ **Resolved (Phase 2):** the maintainer confirmed 2.x had effectively no external installs, so 3.0 removes the flat API (`viya_utils`) and the `compat` bridge outright — a clean break rather than a deprecation cycle. `MIGRATION.md` is retained as a porting reference. Nothing is yanked from PyPI.
 - **Name/brand.** Confirm whether this stays a personal project or becomes SAS-affiliated — it affects the LICENSE holder, contact email, code-of-conduct owner, and where the docs are hosted.
@@ -356,7 +356,7 @@ All work follows trunk-based development with short-lived branches and mandatory
 ## 9. Definition of done
 
 The library is "production ready" when:
-- it installs cleanly on Python 3.9–3.13 (and on Linux/macOS/Windows) with declared, dependency-pinned requirements;
+- it installs cleanly on Python 3.10–3.13 (and on Linux/macOS/Windows) with declared, dependency-pinned requirements;
 - the public API is a typed, documented client; **every failure raises a typed `ViyaError` subclass with actionable context — no `print`, no swallowed exceptions, no `None`-as-error, no request without a timeout**;
 - retries with backoff/jitter, `Retry-After` handling, TLS-on-by-default, and guaranteed token redaction are in place and tested;
 - every public path (including each error branch and the three fixed bugs) has unit tests with ≥90% coverage and **no network in default CI**; opt-in live integration tests exist;
@@ -513,6 +513,18 @@ provider seam. Low-risk, immediately useful — it removes the most common piece
 user boilerplate. *Slices: 6.1a client-credentials; 6.1b password grant; 6.1c
 authorization-code.*
 
+**Security note on `PasswordAuth`.** The resource-owner password grant handles
+raw user credentials, so it is treated as **high-risk and opt-in**:
+documentation must steer users to `ClientCredentialsAuth` (service accounts) or
+`AuthorizationCodeAuth` (interactive) as the default, and reserve `PasswordAuth`
+for environments where neither is available. The provider must never log or
+persist the username/password (only the resulting `OAuthToken` is held, in
+memory), and the redaction backstop must cover the credential fields. Because the
+password grant depends on the SASLogon client being registered with
+`authorized_grant_types=password`, 6.1b must confirm support (and any required
+SASLogon configuration) on Viya 3.5 and each targeted Viya 4 release before it is
+advertised as supported.
+
 ### Phase 6.2 — Refresh, caching & expiry-aware rotation (release 3.9)
 
 A caching wrapper over the 6.1 providers that tracks `expires_in`, refreshes
@@ -523,6 +535,18 @@ in-flight refresh under a lock, so N concurrent requests trigger one token call,
 not N. This is what makes long-running and multi-threaded callers robust without
 the user writing any refresh logic. *Slices: 6.2a expiry-aware cache + proactive
 refresh; 6.2b refresh-token rotation; 6.2c thread-safe single-flight.*
+
+**Re-authentication behavior when refresh is impossible.** The "fall back to a
+fresh grant" path is only valid for providers that can mint a new token
+non-interactively (`ClientCredentialsAuth`, `PasswordAuth`). `AuthorizationCodeAuth`
+cannot silently regenerate an authorization code, so when it has no usable
+`refresh_token` — or when a refresh returns `invalid_grant` — the wrapper must
+**not** attempt a generic fresh grant. Instead it raises a typed
+`ViyaAuthError` (or invokes an explicit, caller-supplied re-authentication
+callback if one was provided) so the interactive login is driven deliberately by
+the application rather than triggered as a surprise mid-request. Each provider
+therefore declares whether it supports non-interactive re-minting, and the cache
+honors that capability.
 
 ### Phase 6.3 — Credential sources & discovery (release 3.10)
 

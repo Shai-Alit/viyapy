@@ -60,7 +60,7 @@ generic versions so you know what each block does.
    gh pr create --base main --head phase-<slice>-<slug> --fill
    ```
 5. ☐ **Wait for automated review + CI.** Must be green before merge: `CI` (ruff,
-   mypy `--strict`, pytest 3.9–3.13, coverage ≥90%), `Docs` (strict build),
+   mypy `--strict`, pytest 3.10–3.13, coverage ≥90%), `Docs` (strict build),
    `Security` (pip-audit, bandit, gitleaks, SBOM), and `API Drift`.
 6. 🤖 I address review feedback locally; ☐ you `git push` to update the PR. Repeat
    until approved + green.
@@ -378,6 +378,14 @@ All Phase 6 work lands behind the existing `auth=` provider seam (no API break).
 Settle first: **authorization-code UX** (loopback redirect vs device-code vs paste)
 before 6.1c — depends on what the target SASLogon releases support.
 
+> **⛔ Merge barrier (applies to every Phase 6 slice below).** These slices are
+> sequential: each `git checkout main && git pull` only picks up the previous
+> slice if that slice's PR is **already reviewed, CI-green, and squash-merged into
+> `main`**. Do **not** copy a whole block and run it start-to-finish — after each
+> `gh pr create`, stop, wait for the merge, then start the next slice. The
+> `# ⛔ BARRIER` comment below marks each point where the prior slice must be on
+> `main` first.
+
 ```bash
 # 6.1a — client-credentials provider (SASLogon /oauth/token)
 git checkout main && git pull
@@ -387,6 +395,7 @@ git add -A && git commit -m "feat(auth): add SASLogon client-credentials provide
 git push -u origin phase-6.1a-auth-client-credentials
 gh pr create --base main --head phase-6.1a-auth-client-credentials --fill
 
+# ⛔ BARRIER: wait for 6.1a to be reviewed, CI-green, and squash-merged to main.
 # 6.1b — resource-owner password grant provider
 git checkout main && git pull
 git checkout -b phase-6.1b-auth-password-grant
@@ -395,6 +404,7 @@ git add -A && git commit -m "feat(auth): add resource-owner password grant provi
 git push -u origin phase-6.1b-auth-password-grant
 gh pr create --base main --head phase-6.1b-auth-password-grant --fill
 
+# ⛔ BARRIER: wait for 6.1b to be reviewed, CI-green, and squash-merged to main.
 # 6.1c — authorization-code provider
 git checkout main && git pull
 git checkout -b phase-6.1c-auth-authorization-code
@@ -403,7 +413,7 @@ git add -A && git commit -m "feat(auth): add authorization-code provider"
 git push -u origin phase-6.1c-auth-authorization-code
 gh pr create --base main --head phase-6.1c-auth-authorization-code --fill
 ```
-→ then Section C, tag `v3.8.0`.
+→ after 6.1c merges, then Section C, tag `v3.8.0`.
 
 ### Phase 6.2 — Refresh, caching & expiry-aware rotation → release **3.9**
 Settle first: none blocking (wraps the 6.1 providers).
@@ -417,6 +427,7 @@ git add -A && git commit -m "feat(auth): add expiry-aware token cache with proac
 git push -u origin phase-6.2a-auth-refresh-cache
 gh pr create --base main --head phase-6.2a-auth-refresh-cache --fill
 
+# ⛔ BARRIER: wait for 6.2a to be reviewed, CI-green, and squash-merged to main.
 # 6.2b — refresh-token rotation
 git checkout main && git pull
 git checkout -b phase-6.2b-auth-refresh-token
@@ -425,6 +436,7 @@ git add -A && git commit -m "feat(auth): use refresh-token grant for rotation"
 git push -u origin phase-6.2b-auth-refresh-token
 gh pr create --base main --head phase-6.2b-auth-refresh-token --fill
 
+# ⛔ BARRIER: wait for 6.2b to be reviewed, CI-green, and squash-merged to main.
 # 6.2c — thread-safe single-flight refresh
 git checkout main && git pull
 git checkout -b phase-6.2c-auth-single-flight
@@ -433,7 +445,7 @@ git add -A && git commit -m "feat(auth): make token refresh thread-safe (single-
 git push -u origin phase-6.2c-auth-single-flight
 gh pr create --base main --head phase-6.2c-auth-single-flight --fill
 ```
-→ then Section C, tag `v3.9.0`.
+→ after 6.2c merges, then Section C, tag `v3.9.0`.
 
 ### Phase 6.3 — Credential sources & discovery → release **3.10**
 Settle first: **profile-file format** (read the SAS Viya CLI profile vs a native
@@ -448,6 +460,7 @@ git add -A && git commit -m "feat(auth): add env-var credential resolver and fro
 git push -u origin phase-6.3a-auth-from-env
 gh pr create --base main --head phase-6.3a-auth-from-env --fill
 
+# ⛔ BARRIER: wait for 6.3a to be reviewed, CI-green, and squash-merged to main.
 # 6.3b — SAS profile/config file + from_profile()
 git checkout main && git pull
 git checkout -b phase-6.3b-auth-profile-file
@@ -456,6 +469,7 @@ git add -A && git commit -m "feat(auth): read SAS profile/config file and add fr
 git push -u origin phase-6.3b-auth-profile-file
 gh pr create --base main --head phase-6.3b-auth-profile-file --fill
 
+# ⛔ BARRIER: wait for 6.3b to be reviewed, CI-green, and squash-merged to main.
 # 6.3c — optional keyring extra
 git checkout main && git pull
 git checkout -b phase-6.3c-auth-keyring

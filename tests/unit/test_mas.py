@@ -135,6 +135,16 @@ def test_list_rejects_bad_page_size(bad: object) -> None:
 
 
 @responses.activate
+def test_list_validates_page_size_eagerly() -> None:
+    # page_size is validated when list() is called, not lazily on first
+    # iteration — so the error surfaces at the call site. Note the absence of an
+    # enclosing list(...): the exception must be raised without iterating.
+    with pytest.raises(ViyaConfigError):
+        make_client().mas.list(page_size=0)
+    assert len(responses.calls) == 0
+
+
+@responses.activate
 def test_list_first_page_failure_raises() -> None:
     # A non-2xx on the very first page must surface as a typed error, not an
     # empty iterator.
