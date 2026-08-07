@@ -27,7 +27,7 @@ Once 3.0 is published, the usual install applies:
 pip install viyapy
 ```
 
-Requires Python 3.9+.
+Requires Python 3.10+.
 
 ## Quickstart
 
@@ -124,7 +124,7 @@ later release). In the meantime:
 
 ## Supported versions
 
-- **Python:** 3.9 – 3.13
+- **Python:** 3.10 – 3.13
 - **SAS Viya:** 3.5 and Viya 4 (LTS and Stable tracks). Viya 3.5 **revision
   24w44 (October 2024) or later**, deployed on a supported Linux distribution,
   holds Standard Support through **October 1, 2027**; older revisions and other

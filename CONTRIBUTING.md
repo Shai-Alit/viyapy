@@ -12,7 +12,7 @@ python -m pip install -e ".[dev]"   # runtime + dev tools
 pre-commit install                  # ruff/mypy/hooks on commit
 ```
 
-Use a Python between **3.9 and 3.13** for running the test suite (viyapy's
+Use a Python between **3.10 and 3.13** for running the test suite (viyapy's
 supported range). Newer interpreters are fine for building docs.
 
 ## Quality gates
