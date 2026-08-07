@@ -22,7 +22,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - API-drift coverage for the new `list_mas_modules` and `get_mas_module`
   endpoints: declared in `contracts/viya4.yaml` and `contracts/viya35.yaml`, with
   `mas_modules.json`/`mas_module.json` fixtures per generation and matching checks
-  in `scripts/check_api_drift.py`.
+  in `scripts/check_api_drift.py`. Both are now required endpoints in the drift
+  gate, so a dropped contract entry can't silently bypass the check.
+
+### Changed
+
+- Hardened request-path construction: dynamic segments (`decision_id`,
+  `module_id`, and the MAS `step`) are now percent-encoded, so a reserved
+  character (`/`, `?`, `#`, …) in an id can no longer alter the request path.
+- `parse_module` now raises `ViyaResponseError` when a module payload carries no
+  usable string `id`, instead of returning a `MasModule` with a false identity
+  (e.g. the literal `"None"`).
 
 ## [3.0.0] - 2026-08-03
 

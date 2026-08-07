@@ -10,7 +10,12 @@ import pytest
 import responses
 
 from viyapy import ViyaClient
-from viyapy.exceptions import ViyaConfigError, ViyaNotFoundError
+from viyapy.exceptions import (
+    ViyaConfigError,
+    ViyaNotFoundError,
+    ViyaResponseError,
+    ViyaServerError,
+)
 
 BASE = "https://viya.example.com"
 
@@ -130,6 +135,53 @@ def test_list_rejects_bad_page_size(bad: object) -> None:
 
 
 @responses.activate
+def test_list_first_page_failure_raises() -> None:
+    # A non-2xx on the very first page must surface as a typed error, not an
+    # empty iterator.
+    responses.add(
+        responses.GET, f"{BASE}/microanalyticScore/modules", json={"message": "boom"}, status=500
+    )
+    with pytest.raises(ViyaServerError):
+        list(make_client().mas.list())
+
+
+@responses.activate
+def test_list_later_page_failure_raises() -> None:
+    # The first page yields, but a failure while fetching the next page must
+    # propagate mid-iteration rather than truncating silently.
+    page1 = {
+        "items": [{"id": "m1", "name": "one"}],
+        "links": [{"rel": "next", "href": "/microanalyticScore/modules?start=1&limit=100"}],
+    }
+    responses.add(responses.GET, f"{BASE}/microanalyticScore/modules", json=page1, status=200)
+    responses.add(
+        responses.GET,
+        f"{BASE}/microanalyticScore/modules?start=1&limit=100",
+        json={"message": "boom"},
+        status=503,
+        match_querystring=True,
+    )
+    iterator = make_client().mas.list()
+    assert next(iterator).id == "m1"
+    with pytest.raises(ViyaServerError):
+        list(iterator)
+
+
+@responses.activate
+def test_list_item_without_id_raises_response_error() -> None:
+    # A collection item missing a usable id is a malformed payload, not a
+    # silently-accepted module with a false identity.
+    responses.add(
+        responses.GET,
+        f"{BASE}/microanalyticScore/modules",
+        json={"items": [{"name": "no-id-here"}], "links": []},
+        status=200,
+    )
+    with pytest.raises(ViyaResponseError):
+        list(make_client().mas.list())
+
+
+@responses.activate
 @pytest.mark.parametrize("generation", ["viya4", "viya35"])
 def test_get_module_parses_payload(
     generation: str, load_fixture: Callable[[str, str], Any], version_for: Callable[[str], str]
@@ -183,3 +235,42 @@ def test_get_module_tolerates_sparse_payload() -> None:
     assert module.revision is None
     assert module.step_ids == ()
     assert module.name is None
+
+
+@responses.activate
+def test_get_module_without_id_raises_response_error() -> None:
+    responses.add(
+        responses.GET,
+        f"{BASE}/microanalyticScore/modules/m",
+        json={"name": "orphan", "revision": 1},
+        status=200,
+    )
+    with pytest.raises(ViyaResponseError):
+        make_client().mas.get("m")
+
+
+@responses.activate
+def test_get_percent_encodes_reserved_chars_in_module_id() -> None:
+    # A module id carrying reserved characters must be encoded into a single path
+    # segment, not allowed to inject extra path/query structure.
+    responses.add(
+        responses.GET,
+        f"{BASE}/microanalyticScore/modules/weird%2Fid%3Fx",
+        json={"id": "weird/id?x"},
+        status=200,
+    )
+    module = make_client().mas.get("weird/id?x")
+    assert module.id == "weird/id?x"
+    assert "/modules/weird%2Fid%3Fx" in responses.calls[0].request.url
+
+
+@responses.activate
+def test_execute_percent_encodes_path_segments() -> None:
+    responses.add(
+        responses.POST,
+        f"{BASE}/microanalyticScore/modules/a%2Fb/steps/c%3Fd",
+        json={"outputs": []},
+        status=200,
+    )
+    make_client().mas.execute("a/b", {}, step="c?d")
+    assert "/modules/a%2Fb/steps/c%3Fd" in responses.calls[0].request.url

@@ -44,7 +44,12 @@ _STEP = "__STEP__"
 
 # Every generation must declare these endpoints; the checker fails if one is
 # missing so a deleted entry can't silently pass the gate.
-REQUIRED_ENDPOINTS = ("get_decision_content", "execute_mas_step")
+REQUIRED_ENDPOINTS = (
+    "get_decision_content",
+    "execute_mas_step",
+    "list_mas_modules",
+    "get_mas_module",
+)
 
 
 def _load_yaml(path: Path) -> dict[str, Any]:

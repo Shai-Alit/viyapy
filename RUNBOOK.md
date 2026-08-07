@@ -1,7 +1,8 @@
-# Phase 5 Maintainer Runbook — Manual Steps Punch List
+# Phase 5–6 Maintainer Runbook — Manual Steps Punch List
 
 This is the operational checklist **you** run for the Phase 5 feature expansion
-(releases 3.1 → 3.7). It exists because the dev sandbox has no outbound access to
+and the Phase 6 authentication work (releases 3.1 → 3.10). It exists because the
+dev sandbox has no outbound access to
 GitHub and no `gh`/SSH credentials: code and commits are prepared in the working
 copy, but **every step that touches GitHub or PyPI is manual and yours**.
 
@@ -74,7 +75,7 @@ generic versions so you know what each block does.
 
 ## C. Per-phase release punch list (after the phase's last slice merges)
 
-Each phase ships a minor release (3.1 … 3.7). From `RELEASING.md`:
+Each phase ships a minor release (3.1 … 3.10). From `RELEASING.md`:
 
 1. ☐ Confirm `main` is green and `[Unreleased]` lists everything in the phase.
 2. 🤖 I prepare the release commit on a `release/3.x` branch: move `[Unreleased]`
@@ -372,6 +373,99 @@ gh pr create --base main --head phase-5.7d-cas-result-fetch --fill
 ```
 → then Section C, tag `v3.7.0`. This caps the "fully featured" goal.
 
+### Phase 6.1 — SAS OAuth grant-flow providers → release **3.8**
+All Phase 6 work lands behind the existing `auth=` provider seam (no API break).
+Settle first: **authorization-code UX** (loopback redirect vs device-code vs paste)
+before 6.1c — depends on what the target SASLogon releases support.
+
+```bash
+# 6.1a — client-credentials provider (SASLogon /oauth/token)
+git checkout main && git pull
+git checkout -b phase-6.1a-auth-client-credentials
+#   … 🤖 implement 6.1a …
+git add -A && git commit -m "feat(auth): add SASLogon client-credentials provider"
+git push -u origin phase-6.1a-auth-client-credentials
+gh pr create --base main --head phase-6.1a-auth-client-credentials --fill
+
+# 6.1b — resource-owner password grant provider
+git checkout main && git pull
+git checkout -b phase-6.1b-auth-password-grant
+#   … 🤖 implement 6.1b …
+git add -A && git commit -m "feat(auth): add resource-owner password grant provider"
+git push -u origin phase-6.1b-auth-password-grant
+gh pr create --base main --head phase-6.1b-auth-password-grant --fill
+
+# 6.1c — authorization-code provider
+git checkout main && git pull
+git checkout -b phase-6.1c-auth-authorization-code
+#   … 🤖 implement 6.1c …
+git add -A && git commit -m "feat(auth): add authorization-code provider"
+git push -u origin phase-6.1c-auth-authorization-code
+gh pr create --base main --head phase-6.1c-auth-authorization-code --fill
+```
+→ then Section C, tag `v3.8.0`.
+
+### Phase 6.2 — Refresh, caching & expiry-aware rotation → release **3.9**
+Settle first: none blocking (wraps the 6.1 providers).
+
+```bash
+# 6.2a — expiry-aware cache + proactive refresh
+git checkout main && git pull
+git checkout -b phase-6.2a-auth-refresh-cache
+#   … 🤖 implement 6.2a …
+git add -A && git commit -m "feat(auth): add expiry-aware token cache with proactive refresh"
+git push -u origin phase-6.2a-auth-refresh-cache
+gh pr create --base main --head phase-6.2a-auth-refresh-cache --fill
+
+# 6.2b — refresh-token rotation
+git checkout main && git pull
+git checkout -b phase-6.2b-auth-refresh-token
+#   … 🤖 implement 6.2b …
+git add -A && git commit -m "feat(auth): use refresh-token grant for rotation"
+git push -u origin phase-6.2b-auth-refresh-token
+gh pr create --base main --head phase-6.2b-auth-refresh-token --fill
+
+# 6.2c — thread-safe single-flight refresh
+git checkout main && git pull
+git checkout -b phase-6.2c-auth-single-flight
+#   … 🤖 implement 6.2c …
+git add -A && git commit -m "feat(auth): make token refresh thread-safe (single-flight)"
+git push -u origin phase-6.2c-auth-single-flight
+gh pr create --base main --head phase-6.2c-auth-single-flight --fill
+```
+→ then Section C, tag `v3.9.0`.
+
+### Phase 6.3 — Credential sources & discovery → release **3.10**
+Settle first: **profile-file format** (read the SAS Viya CLI profile vs a native
+file) before 6.3b; keep `keyring` an optional `viyapy[keyring]` extra in 6.3c.
+
+```bash
+# 6.3a — env-var resolver + ViyaClient.from_env()
+git checkout main && git pull
+git checkout -b phase-6.3a-auth-from-env
+#   … 🤖 implement 6.3a …
+git add -A && git commit -m "feat(auth): add env-var credential resolver and from_env()"
+git push -u origin phase-6.3a-auth-from-env
+gh pr create --base main --head phase-6.3a-auth-from-env --fill
+
+# 6.3b — SAS profile/config file + from_profile()
+git checkout main && git pull
+git checkout -b phase-6.3b-auth-profile-file
+#   … 🤖 implement 6.3b …
+git add -A && git commit -m "feat(auth): read SAS profile/config file and add from_profile()"
+git push -u origin phase-6.3b-auth-profile-file
+gh pr create --base main --head phase-6.3b-auth-profile-file --fill
+
+# 6.3c — optional keyring extra
+git checkout main && git pull
+git checkout -b phase-6.3c-auth-keyring
+#   … 🤖 implement 6.3c …
+git add -A && git commit -m "feat(auth): add optional keyring credential source (viyapy[keyring])"
+git push -u origin phase-6.3c-auth-keyring
+gh pr create --base main --head phase-6.3c-auth-keyring --fill
+```
+→ then Section C, tag `v3.10.0`. This completes the first-class auth story.
+
 ---
 
 ## E. Cross-cutting reminders (apply to every slice)
@@ -388,3 +482,8 @@ gh pr create --base main --head phase-5.7d-cas-result-fetch --fill
   exists.
 - Public docs run `strict: true` — any new `docs/*.md` page must be added to the
   `mkdocs.yml` nav, or the `Docs` check fails.
+- **Phase 6 (auth) only:** every new flow lands behind the existing `auth=`
+  provider seam (no API break); tokens/secrets stay in memory and are never
+  written to disk; keep `keyring` an optional `viyapy[keyring]` extra, never a
+  core dependency; and make sure the redaction backstop still hides new token
+  fields in reprs/logs.
