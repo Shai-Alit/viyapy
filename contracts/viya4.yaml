@@ -25,3 +25,17 @@ endpoints:
     # Viya 4 returns synchronous results under `outputs`.
     outputs_key: outputs
     response_fields: [executionState, moduleId, stepId]
+
+  - id: list_mas_modules
+    method: GET
+    path: /microanalyticScore/modules
+    accept: application/vnd.sas.collection+json
+    # Collection-wrapper field the pagination iterator reads.
+    response_fields: [items]
+
+  - id: get_mas_module
+    method: GET
+    path: /microanalyticScore/modules/{module_id}
+    accept: application/vnd.sas.microanalytic.module+json
+    # Fields the client reads off a single module payload.
+    response_fields: [id, name, stepIds]

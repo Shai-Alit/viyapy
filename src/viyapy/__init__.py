@@ -28,7 +28,7 @@ from .exceptions import (
     ViyaServerError,
     ViyaTimeoutError,
 )
-from .models import Decision, ExecutionResult, ModelStep
+from .models import Decision, ExecutionResult, MasModule, ModelStep
 
 try:
     __version__ = version("viyapy")
@@ -46,6 +46,7 @@ logging.getLogger(__name__).addHandler(_handler)
 __all__ = [
     "Decision",
     "ExecutionResult",
+    "MasModule",
     "ModelStep",
     "TokenProvider",
     "ViyaAPIError",

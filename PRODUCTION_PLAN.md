@@ -447,7 +447,11 @@ score+poll; 5.7d result fetch.*
   batch scoring cleanly. Decide after a spike.
 - **Decision-flow builder scope (5.4):** how much flow grammar to model as typed
   objects vs accept as raw JSON initially.
-- **Client-side validation strictness (5.1):** warn vs raise by default.
+- **Client-side validation strictness (5.1): decided — raise.** Client-side
+  validation raises `ViyaValidationError` on a signature mismatch rather than
+  warning. Rationale: Viya rejects a mismatched signature regardless, but the
+  failure surfaces deeper in the execution chain where it is harder to debug;
+  raising locally fails fast and identifies the offending input directly.
 - **Publish endpoint specifics (5.6):** confirm exact `modelPublish`/decision
   publish paths on a live deployment; pin in `contracts/`.
 - **Auth scopes:** document the SAS scopes each new area needs so `ViyaAuthError`

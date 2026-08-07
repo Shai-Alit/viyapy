@@ -38,6 +38,6 @@ def test_exception_names_are_exported() -> None:
 
 
 def test_model_names_are_exported() -> None:
-    for name in ["Decision", "ModelStep", "ExecutionResult"]:
+    for name in ["Decision", "ModelStep", "ExecutionResult", "MasModule"]:
         assert name in viyapy.__all__
         assert hasattr(viyapy, name)

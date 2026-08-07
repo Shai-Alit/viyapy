@@ -26,3 +26,22 @@ def require_identifier(value: object, name: str) -> str:
     if not isinstance(value, str) or not value.strip():
         raise ViyaConfigError(f"{name} must be a non-empty string (got {value!r})")
     return value.strip()
+
+
+def require_positive_int(value: object, name: str) -> int:
+    """Return ``value`` if it is a positive integer, else raise.
+
+    Args:
+        value: The candidate value (e.g. a page size).
+        name: Parameter name, used in the error message.
+
+    Returns:
+        The validated integer.
+
+    Raises:
+        ViyaConfigError: ``value`` is not an ``int`` (``bool`` excluded) or is
+            not greater than zero.
+    """
+    if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
+        raise ViyaConfigError(f"{name} must be a positive integer (got {value!r})")
+    return value
