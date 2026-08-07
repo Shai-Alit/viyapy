@@ -66,6 +66,17 @@ def test_get_missing_decision_raises_not_found() -> None:
 
 
 @responses.activate
+def test_get_percent_encodes_reserved_chars_in_decision_id() -> None:
+    # A decision id carrying reserved characters must be encoded into a single
+    # path segment, not allowed to inject extra path/query structure.
+    raw = {"id": "weird/id?x", "name": "n", "flow": {"steps": []}}
+    responses.add(responses.GET, f"{BASE}/decisions/flows/weird%2Fid%3Fx", json=raw, status=200)
+    decision = make_client().decisions.get("weird/id?x")
+    assert decision.id == "weird/id?x"
+    assert "/decisions/flows/weird%2Fid%3Fx" in responses.calls[0].request.url
+
+
+@responses.activate
 def test_non_json_decision_body_raises_response_error() -> None:
     responses.add(
         responses.GET, f"{BASE}/decisions/flows/d1", body="<html>not json</html>", status=200

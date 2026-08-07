@@ -1,0 +1,21 @@
+{
+  "id": "api_tester1_0",
+  "name": "api_tester",
+  "description": "Published decision exposed as a MAS module",
+  "revision": 0,
+  "scope": "public",
+  "stepIds": ["execute"],
+  "createdBy": "sasdemo",
+  "modifiedBy": "sasdemo",
+  "creationTimeStamp": "2024-06-01T12:00:00.000Z",
+  "modifiedTimeStamp": "2024-06-02T09:30:00.000Z",
+  "links": [
+    {
+      "method": "GET",
+      "rel": "self",
+      "href": "/microanalyticScore/modules/api_tester1_0",
+      "type": "application/vnd.sas.microanalytic.module"
+    }
+  ],
+  "version": 1
+}

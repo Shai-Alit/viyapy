@@ -1,0 +1,40 @@
+{
+  "name": "modules",
+  "accept": "application/vnd.sas.microanalytic.module",
+  "start": 0,
+  "count": 2,
+  "limit": 100,
+  "items": [
+    {
+      "id": "api_tester1_0",
+      "name": "api_tester",
+      "revision": 0,
+      "scope": "public",
+      "stepIds": ["execute"],
+      "createdBy": "sasdemo",
+      "modifiedBy": "sasdemo",
+      "creationTimeStamp": "2026-06-01T12:00:00.000Z",
+      "modifiedTimeStamp": "2026-06-02T09:30:00.000Z"
+    },
+    {
+      "id": "risk_score2_1",
+      "name": "risk_score",
+      "revision": 3,
+      "scope": "public",
+      "stepIds": ["execute", "score"],
+      "createdBy": "sasdemo",
+      "modifiedBy": "analyst",
+      "creationTimeStamp": "2026-05-10T08:00:00.000Z",
+      "modifiedTimeStamp": "2026-07-01T14:22:00.000Z"
+    }
+  ],
+  "links": [
+    {
+      "method": "GET",
+      "rel": "self",
+      "href": "/microanalyticScore/modules?start=0&limit=100",
+      "type": "application/vnd.sas.collection"
+    }
+  ],
+  "version": 2
+}

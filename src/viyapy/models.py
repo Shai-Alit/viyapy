@@ -46,6 +46,37 @@ class Decision:
 
 
 @dataclass(frozen=True)
+class MasModule:
+    """A SAS Micro Analytic Score (MAS) module.
+
+    Attributes:
+        id: The module id.
+        name: The module's name, if present.
+        description: The module's description, if present.
+        revision: The module revision number, if reported.
+        scope: The module scope (e.g. ``"public"``), if reported.
+        step_ids: The names of the steps the module exposes.
+        created_by: User who created the module, if reported.
+        modified_by: User who last modified the module, if reported.
+        creation_timestamp: Creation timestamp string, if reported.
+        modified_timestamp: Last-modified timestamp string, if reported.
+        raw: The originating module payload.
+    """
+
+    id: str
+    name: str | None = None
+    description: str | None = None
+    revision: int | None = None
+    scope: str | None = None
+    step_ids: tuple[str, ...] = ()
+    created_by: str | None = None
+    modified_by: str | None = None
+    creation_timestamp: str | None = None
+    modified_timestamp: str | None = None
+    raw: dict[str, Any] = field(default_factory=dict, repr=False)
+
+
+@dataclass(frozen=True)
 class ExecutionResult:
     """The result of executing a MAS module step.
 

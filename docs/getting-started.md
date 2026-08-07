@@ -17,7 +17,7 @@ Once 3.0 is published, the usual install applies:
 pip install viyapy
 ```
 
-viyapy requires Python 3.9 or newer.
+viyapy requires Python 3.10 or newer.
 
 ## Your first call
 

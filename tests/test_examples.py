@@ -37,7 +37,11 @@ def test_example_imports_cleanly(path: Path) -> None:
 
 def test_examples_are_discovered() -> None:
     # Guard against the glob silently matching nothing (which would pass vacuously).
-    assert {p.name for p in EXAMPLE_FILES} >= {"inspect_decision.py", "execute_module.py"}
+    assert {p.name for p in EXAMPLE_FILES} >= {
+        "inspect_decision.py",
+        "execute_module.py",
+        "list_modules.py",
+    }
 
 
 @responses.activate
@@ -77,3 +81,22 @@ def test_execute_module_example_runs(
     _load(EXAMPLES_DIR / "execute_module.py").main()
 
     assert "out = 42" in capsys.readouterr().out
+
+
+@responses.activate
+def test_list_modules_example_runs(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    responses.add(
+        responses.GET,
+        f"{BASE}/microanalyticScore/modules",
+        json={"items": [{"id": "m1", "name": "one", "stepIds": ["execute"]}], "links": []},
+        status=200,
+    )
+    monkeypatch.setenv("VIYA_URL", BASE)
+    monkeypatch.setenv("VIYA_TOKEN", "tok")
+
+    _load(EXAMPLES_DIR / "list_modules.py").main()
+
+    out = capsys.readouterr().out
+    assert "m1" in out and "steps: execute" in out

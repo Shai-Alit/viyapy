@@ -10,12 +10,14 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from typing import Any
+from urllib.parse import quote
 
 from ..exceptions import ViyaResponseError
-from ..models import Decision, ExecutionResult, ModelStep
+from ..models import Decision, ExecutionResult, MasModule, ModelStep
 
 MODEL_STEP_TYPE = "application/vnd.sas.decision.step.model"
 DEFAULT_MAS_STEP = "execute"
+MAS_MODULE_MEDIA_TYPE = "application/vnd.sas.microanalytic.module+json"
 
 
 class Dialect:
@@ -31,21 +33,36 @@ class Dialect:
 
     name: str
     decision_media_type: str = "application/vnd.sas.decision+json"
+    mas_module_media_type: str = MAS_MODULE_MEDIA_TYPE
     outputs_keys: tuple[str, ...] = ("outputs", "output")
 
     # -- endpoint paths -----------------------------------------------------
 
     def decision_path(self, decision_id: str) -> str:
         """Return the relative path for fetching a decision flow's content."""
-        return f"/decisions/flows/{decision_id}"
+        return f"/decisions/flows/{quote(decision_id, safe='')}"
+
+    def mas_modules_path(self) -> str:
+        """Return the relative path for the MAS modules collection."""
+        return "/microanalyticScore/modules"
+
+    def mas_module_path(self, module_id: str) -> str:
+        """Return the relative path for a single MAS module's metadata."""
+        return f"/microanalyticScore/modules/{quote(module_id, safe='')}"
 
     def mas_execute_path(self, module_id: str, step_id: str = DEFAULT_MAS_STEP) -> str:
         """Return the relative path for executing a MAS module step.
 
         ``step_id`` defaults to ``"execute"`` (correct for published decisions);
         pass another value for arbitrary modules exposing named steps.
+
+        Both segments are percent-encoded so a reserved character (``/``, ``?``,
+        ``#``, …) in an id can't alter the request path.
         """
-        return f"/microanalyticScore/modules/{module_id}/steps/{step_id}"
+        return (
+            f"/microanalyticScore/modules/{quote(module_id, safe='')}"
+            f"/steps/{quote(step_id, safe='')}"
+        )
 
     # -- request building ---------------------------------------------------
 
@@ -78,6 +95,42 @@ class Dialect:
             if isinstance(step, Mapping) and step.get("type") == MODEL_STEP_TYPE
         )
         return Decision(id=decision_id, name=raw.get("name"), models=models, raw=dict(raw))
+
+    def parse_module(self, raw: Mapping[str, Any]) -> MasModule:
+        """Build a :class:`MasModule` from a MAS module payload.
+
+        Used for both a single-module ``GET`` and each item of the modules
+        collection; the full payload is retained on :attr:`MasModule.raw`.
+
+        Raises:
+            ViyaResponseError: The payload has no usable string ``id`` — without
+                it the returned model would have a false identity (e.g. the
+                literal ``"None"``), so a malformed response fails loudly here.
+        """
+        module_id = raw.get("id")
+        if not isinstance(module_id, str) or not module_id.strip():
+            raise ViyaResponseError(
+                "MAS module payload has no usable 'id' field",
+                response_body=dict(raw),
+            )
+        step_ids = raw.get("stepIds")
+        steps = tuple(str(s) for s in step_ids) if isinstance(step_ids, list) else ()
+        revision = raw.get("revision")
+        if isinstance(revision, bool) or not isinstance(revision, int):
+            revision = None
+        return MasModule(
+            id=module_id.strip(),
+            name=raw.get("name"),
+            description=raw.get("description"),
+            revision=revision,
+            scope=raw.get("scope"),
+            step_ids=steps,
+            created_by=raw.get("createdBy"),
+            modified_by=raw.get("modifiedBy"),
+            creation_timestamp=raw.get("creationTimeStamp"),
+            modified_timestamp=raw.get("modifiedTimeStamp"),
+            raw=dict(raw),
+        )
 
     def parse_execution(
         self, module_id: str, step_id: str, raw: Mapping[str, Any]

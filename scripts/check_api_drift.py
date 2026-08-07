@@ -44,7 +44,12 @@ _STEP = "__STEP__"
 
 # Every generation must declare these endpoints; the checker fails if one is
 # missing so a deleted entry can't silently pass the gate.
-REQUIRED_ENDPOINTS = ("get_decision_content", "execute_mas_step")
+REQUIRED_ENDPOINTS = (
+    "get_decision_content",
+    "execute_mas_step",
+    "list_mas_modules",
+    "get_mas_module",
+)
 
 
 def _load_yaml(path: Path) -> dict[str, Any]:
@@ -132,6 +137,26 @@ def _check_generation(name: str, entry: dict[str, Any], problems: list[str]) -> 
                 f"!= contract {mas['outputs_key']!r}"
             )
 
+    # -- MAS module list/get endpoints: paths + media types -----------------
+    modules = endpoints.get("list_mas_modules")
+    if modules and dialect.mas_modules_path() != modules["path"]:
+        problems.append(
+            f"{tag} mas_modules_path: code {dialect.mas_modules_path()!r} "
+            f"!= contract {modules['path']!r}"
+        )
+
+    module = endpoints.get("get_mas_module")
+    if module:
+        expected = module["path"].replace("{module_id}", _MODULE)
+        actual = dialect.mas_module_path(_MODULE)
+        if actual != expected:
+            problems.append(f"{tag} mas_module_path: code {actual!r} != contract {expected!r}")
+        if dialect.mas_module_media_type != module["accept"]:
+            problems.append(
+                f"{tag} module Accept: code {dialect.mas_module_media_type!r} "
+                f"!= contract {module['accept']!r}"
+            )
+
     _check_fixtures(name, contract, dialect, endpoints, problems)
 
 
@@ -167,6 +192,41 @@ def _check_fixtures(
             result = dialect.parse_execution(_MODULE, _STEP, raw)
             if not result.outputs:
                 problems.append(f"{tag} {mas_file.name}: parser produced no outputs")
+
+    modules_ep = endpoints.get("list_mas_modules")
+    modules_file = fixtures / "mas_modules.json"
+    if modules_ep:
+        if not modules_file.exists():
+            problems.append(f"{tag} missing fixture {modules_file.relative_to(REPO_ROOT)}")
+        else:
+            raw = _load_json(modules_file)
+            for field in modules_ep.get("response_fields", []):
+                if not _has_path(raw, field):
+                    problems.append(
+                        f"{tag} fixture {modules_file.name} missing response field {field!r}"
+                    )
+            items = raw.get("items")
+            if not isinstance(items, list) or not items:
+                problems.append(f"{tag} {modules_file.name}: collection has no items to parse")
+            else:
+                parsed = dialect.parse_module(items[0])
+                if not parsed.id:
+                    problems.append(f"{tag} {modules_file.name}: first item parsed with no id")
+
+    module_ep = endpoints.get("get_mas_module")
+    module_file = fixtures / "mas_module.json"
+    if module_ep:
+        if not module_file.exists():
+            problems.append(f"{tag} missing fixture {module_file.relative_to(REPO_ROOT)}")
+        else:
+            raw = _load_json(module_file)
+            for field in module_ep.get("response_fields", []):
+                if not _has_path(raw, field):
+                    problems.append(
+                        f"{tag} fixture {module_file.name} missing response field {field!r}"
+                    )
+            if not dialect.parse_module(raw).id:
+                problems.append(f"{tag} {module_file.name}: module parsed with no id")
 
     dec_ep = endpoints.get("get_decision_content")
     dec_file = fixtures / "decision_content.json"

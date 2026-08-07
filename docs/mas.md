@@ -1,7 +1,38 @@
 # Executing MAS Modules
 
-The `client.mas` group ([`MASClient`][viyapy.mas.MASClient]) executes SAS Micro
-Analytic Score (MAS) module steps.
+The `client.mas` group ([`MASClient`][viyapy.mas.MASClient]) inspects and executes
+SAS Micro Analytic Score (MAS) module steps.
+
+## Discovering modules
+
+[`list`][viyapy.mas.MASClient.list] iterates the modules on the deployment,
+yielding a typed [`MasModule`][viyapy.MasModule] for each. Pages are fetched
+lazily as you consume the iterator, so a large deployment streams rather than
+loads all at once:
+
+```python
+for module in client.mas.list():
+    print(module.id, module.name, module.step_ids)
+
+# Materialize if you need a list, or filter as you go:
+public = [m for m in client.mas.list() if m.scope == "public"]
+```
+
+`list` requests 100 modules per page by default; tune it with `page_size=` (the
+server may cap the effective size). [`get`][viyapy.mas.MASClient.get] fetches a
+single module's metadata by id:
+
+```python
+module = client.mas.get("api_tester1_0")
+module.name              # "api_tester"
+module.step_ids          # ("execute",) — the steps you can pass to execute()
+module.revision          # the module revision, if reported
+module.raw               # the raw module payload
+```
+
+`get` raises [`ViyaNotFoundError`][viyapy.ViyaNotFoundError] if no module has that
+id, and both methods raise [`ViyaConfigError`][viyapy.ViyaConfigError] for an
+invalid `module_id` or `page_size` before any request is issued.
 
 ## Execute a module
 

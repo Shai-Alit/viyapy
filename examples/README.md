@@ -7,6 +7,7 @@ real Viya deployment when run.
 | Script | Env vars | What it does |
 |---|---|---|
 | `inspect_decision.py` | `VIYA_URL`, `VIYA_TOKEN`, `VIYA_DECISION` | Prints a decision flow's name and model steps |
+| `list_modules.py` | `VIYA_URL`, `VIYA_TOKEN` | Lists the MAS modules on the deployment |
 | `execute_module.py` | `VIYA_URL`, `VIYA_TOKEN`, `VIYA_MODULE`, `VIYA_INPUTS` (optional) | Executes a MAS module and prints its outputs |
 
 Example:

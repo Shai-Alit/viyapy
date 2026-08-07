@@ -7,6 +7,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- MAS module introspection: `client.mas.list()` iterates the deployment's MAS
+  modules (lazily, following the collection's pagination links) and
+  `client.mas.get(module_id)` fetches a single module's metadata, both returning
+  the new typed `MasModule` dataclass (exported from the package root, with its
+  raw payload on `.raw`). `list()` accepts a `page_size` (default 100) and
+  fails fast with `ViyaConfigError` on a non-positive value.
+- Reusable collection pagination (`viyapy._pagination.iter_collection`) that
+  walks `application/vnd.sas.collection+json` responses by following `rel="next"`
+  links, terminating safely on a self-referential link. This is the shared
+  foundation for the `list`-style operations in later phases.
+- API-drift coverage for the new `list_mas_modules` and `get_mas_module`
+  endpoints: declared in `contracts/viya4.yaml` and `contracts/viya35.yaml`, with
+  `mas_modules.json`/`mas_module.json` fixtures per generation and matching checks
+  in `scripts/check_api_drift.py`. Both are now required endpoints in the drift
+  gate, so a dropped contract entry can't silently bypass the check.
+
+### Changed
+
+- Hardened request-path construction: dynamic segments (`decision_id`,
+  `module_id`, and the MAS `step`) are now percent-encoded, so a reserved
+  character (`/`, `?`, `#`, …) in an id can no longer alter the request path.
+- `parse_module` now raises `ViyaResponseError` when a module payload carries no
+  usable string `id`, instead of returning a `MasModule` with a false identity
+  (e.g. the literal `"None"`).
+
+### Removed
+
+- Dropped support for Python 3.9 (end-of-life October 2025); the minimum
+  supported version is now Python 3.10. `requires-python`, the CI/nightly
+  matrices, and the ruff/mypy target versions are updated accordingly.
+
 ## [3.0.0] - 2026-08-03
 
 First release of the rewritten library. A clean break from the 2.x flat API;
