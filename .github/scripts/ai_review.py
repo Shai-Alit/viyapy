@@ -10,9 +10,9 @@ Design notes
 ------------
 * Standard library only (``urllib``) so the workflow needs no ``pip install``.
 * Comment-only: the review is submitted with ``event=COMMENT`` and never blocks
-  the merge. Configuration errors exit non-zero (so they surface during setup);
-  transient model/API errors also exit non-zero to show a visible signal, but a
-  best-effort summary comment is posted first when possible.
+  the merge. Missing configuration exits non-zero (so setup problems surface
+  loudly); a transient model/API error instead posts a short "couldn't complete"
+  note and exits zero, so a hiccup doesn't read as a broken required check.
 * Line anchoring is validated against the diff. The model is only allowed to
   comment on added (``+``) lines; any finding that names a line outside the diff
   is demoted into the summary rather than dropped, because GitHub rejects a
@@ -34,12 +34,15 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import sys
 import urllib.error
 import urllib.request
 from typing import Any
 
 GITHUB_API = "https://api.github.com"
+# A skip flag in the PR head commit message opts that PR out of review.
+SKIP_RE = re.compile(r"\[(skip[- ]review|no[- ]review|skip ai[- ]?review)\]", re.IGNORECASE)
 # Only diffs up to this many characters are sent to the model; larger PRs are
 # truncated with a marker so the request stays bounded and cheap.
 MAX_DIFF_CHARS = 200_000
@@ -217,8 +220,8 @@ def call_model(diff_blob: str) -> dict[str, Any]:
         with urllib.request.urlopen(req, timeout=180) as resp:  # noqa: S310 (configured host)
             data = json.loads(resp.read().decode())
     except urllib.error.HTTPError as exc:
-        detail = exc.read().decode(errors="replace")[:1000]
-        sys.exit(f"ai_review: Azure OpenAI call failed ({exc.code}): {detail}")
+        detail = exc.read().decode(errors="replace")[:500]
+        raise RuntimeError(f"Azure OpenAI call failed ({exc.code}): {detail}") from exc
 
     content = data["choices"][0]["message"]["content"]
     return _parse_json(content)
@@ -245,23 +248,37 @@ def _sev(comment: dict[str, Any]) -> str:
 def post_review(
     repo: str, pr: str, token: str, result: dict[str, Any], valid: dict[str, set[int]]
 ) -> None:
+    if not isinstance(result, dict):
+        result = {}
     summary = str(result.get("summary", "")).strip() or "_No summary provided._"
-    raw_comments = result.get("comments") or []
+    raw = result.get("comments")
+    raw_comments = raw if isinstance(raw, list) else []
 
     inline: list[dict[str, Any]] = []
     demoted: list[str] = []
-    for c in raw_comments:
-        path, line = c.get("path"), c.get("line")
-        label = SEVERITY_LABEL[_sev(c)]
-        body = f"**{label}** — {str(c.get('body', '')).strip()}"
-        if isinstance(line, int) and line in valid.get(path, set()):
-            inline.append({"path": path, "line": line, "side": "RIGHT", "body": body})
-        else:  # keep the finding, just can't anchor it to the diff
-            demoted.append(f"- **{path}:{line}** {label} — {str(c.get('body', '')).strip()}")
-
     counts = {s: 0 for s in SEVERITY_ORDER}
     for c in raw_comments:
-        counts[_sev(c)] += 1
+        if not isinstance(c, dict):  # a malformed entry must not crash the review
+            continue
+        sev = _sev(c)
+        counts[sev] += 1
+        label = SEVERITY_LABEL[sev]
+        text = str(c.get("body", "")).strip()
+        path, line = c.get("path"), c.get("line")
+        # bool is an int subclass — exclude it so True/False can't pose as a line.
+        anchorable = (
+            isinstance(path, str)
+            and isinstance(line, int)
+            and not isinstance(line, bool)
+            and line in valid.get(path, set())
+        )
+        if anchorable:
+            inline.append(
+                {"path": path, "line": line, "side": "RIGHT", "body": f"**{label}** — {text}"}
+            )
+        else:  # keep the finding, just can't anchor it to the diff
+            demoted.append(f"- **{path}:{line}** {label} — {text}")
+
     tally = ", ".join(f"{SEVERITY_LABEL[s]}: {counts[s]}" for s in SEVERITY_ORDER if counts[s])
     body_parts = ["## 🤖 Codex review", summary]
     if tally:
@@ -297,10 +314,56 @@ def post_review(
         )
 
 
+def head_commit_has_skip_flag(repo: str, pr: str, token: str) -> bool:
+    """Return True when the PR head commit message carries a skip flag.
+
+    Read via the API (not ``git log``) so the flag is taken from the real head
+    commit rather than a synthetic merge commit, and so this works without
+    checking out the pull-request branch.
+    """
+    try:
+        pull = _gh_request(
+            "GET", f"/repos/{repo}/pulls/{pr}", token, accept="application/vnd.github+json"
+        )
+        head_sha = pull["head"]["sha"]
+        commit = _gh_request(
+            "GET", f"/repos/{repo}/commits/{head_sha}", token, accept="application/vnd.github+json"
+        )
+        message = commit["commit"]["message"]
+    except (urllib.error.URLError, KeyError, TypeError) as exc:
+        print(f"ai_review: could not read head commit message ({exc}); not skipping.")
+        return False
+    return bool(SKIP_RE.search(str(message)))
+
+
+def post_failure_note(repo: str, pr: str, token: str, exc: Exception) -> None:
+    """Leave a short, non-blocking note when the model call could not complete."""
+    print(f"ai_review: model call failed: {exc}", file=sys.stderr)
+    body = (
+        "## 🤖 Codex review\n\n"
+        f"⚠️ The AI reviewer couldn't complete this run (`{type(exc).__name__}`). "
+        "This is non-blocking — re-run the job to retry."
+    )
+    try:
+        _gh_request(
+            "POST",
+            f"/repos/{repo}/issues/{pr}/comments",
+            token,
+            accept="application/vnd.github+json",
+            body={"body": body},
+        )
+    except urllib.error.URLError as post_exc:
+        print(f"ai_review: also failed to post the failure note: {post_exc}", file=sys.stderr)
+
+
 def main() -> int:
     repo = _env("GITHUB_REPOSITORY")
     pr = _env("PR_NUMBER")
     token = _env("GITHUB_TOKEN")
+
+    if head_commit_has_skip_flag(repo, pr, token):
+        print("ai_review: skip flag found in the head commit message; skipping review.")
+        return 0
 
     files = get_pr_files(repo, pr, token)
     if not files:
@@ -312,7 +375,19 @@ def main() -> int:
         print("ai_review: no textual diff to review.")
         return 0
 
-    result = call_model(diff_blob)
+    try:
+        result = call_model(diff_blob)
+    except (
+        urllib.error.URLError,  # includes HTTPError (subclass) and timeouts
+        RuntimeError,
+        KeyError,
+        IndexError,
+        ValueError,  # includes json.JSONDecodeError
+        TimeoutError,
+    ) as exc:
+        post_failure_note(repo, pr, token, exc)
+        return 0
+
     post_review(repo, pr, token, result, valid)
     return 0
 
