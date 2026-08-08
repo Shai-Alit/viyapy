@@ -26,11 +26,20 @@ jobs:
           fetch-depth: 1
 
       - uses: anthropics/claude-code-action@v1.0.183
+        env:
+          # Route Claude Code through Microsoft Foundry (Azure billing) instead
+          # of a personal Claude subscription. Resource name + API key come from
+          # the Foundry "Endpoints and keys" panel.
+          CLAUDE_CODE_USE_FOUNDRY: "1"
+          ANTHROPIC_FOUNDRY_RESOURCE: ${{ vars.ANTHROPIC_FOUNDRY_RESOURCE }}
+          ANTHROPIC_FOUNDRY_API_KEY: ${{ secrets.ANTHROPIC_FOUNDRY_API_KEY }}
+          # Claude Code makes background calls to a small/fast model; point it at
+          # a deployed Haiku so those resolve (deploy claude-haiku-4-5 too).
+          ANTHROPIC_DEFAULT_HAIKU_MODEL: ${{ vars.CLAUDE_FOUNDRY_HAIKU_MODEL }}
         with:
-          # Authenticate with a Claude subscription (Pro/Max) instead of paid
-          # API credits. Generate the token locally with `claude setup-token`
-          # and store it as the CLAUDE_CODE_OAUTH_TOKEN repository secret.
-          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          # Foundry deployment name of the review model, e.g. claude-sonnet-5
+          # (recommended) or claude-opus-4-8. Set the CLAUDE_FOUNDRY_MODEL var.
+          model: ${{ vars.CLAUDE_FOUNDRY_MODEL }}
           prompt: |
             REPO: ${{ github.repository }}
             PR NUMBER: ${{ github.event.pull_request.number }}
