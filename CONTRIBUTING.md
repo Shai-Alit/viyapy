@@ -66,8 +66,9 @@ Keep the two generations' shapes distinct (notably MAS `output` vs `outputs`).
 
 ## Automated review
 
-Two bots review each PR: a Claude reviewer and a Codex reviewer (an Azure AI
-Foundry model). Both post inline comments and are advisory — they never block a
+Two bots review each PR, both running on Azure AI Foundry deployments: a Claude
+reviewer (a deployed Claude model) and a Codex reviewer (a `gpt-5.1-codex`
+deployment). Both post inline comments and are advisory — they never block a
 merge. Notes:
 
 - **Skip a review** on a trivial change by putting `[skip-review]` (or
