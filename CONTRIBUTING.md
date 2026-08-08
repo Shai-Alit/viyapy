@@ -64,6 +64,19 @@ Keep the two generations' shapes distinct (notably MAS `output` vs `outputs`).
   docs/tests for any behavior change.
 - PRs are reviewed before merge; `main` stays releasable at all times.
 
+## Automated review
+
+Two bots review each PR: a Claude reviewer and a Codex reviewer (an Azure AI
+Foundry model). Both post inline comments and are advisory — they never block a
+merge. Notes:
+
+- **Skip a review** on a trivial change by putting `[skip-review]` (or
+  `[no-review]`) in the PR's head commit message, or add the `no-ai-review`
+  label to the PR.
+- **Fork PRs are not reviewed by the Codex bot.** For security, GitHub withholds
+  repository secrets from `pull_request` runs triggered by forks, so the reviewer
+  is skipped rather than failing. A maintainer's review still applies.
+
 ## Reporting bugs and security issues
 
 Open a GitHub issue for bugs and feature requests using the templates. For
