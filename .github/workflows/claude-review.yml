@@ -25,7 +25,7 @@ jobs:
         with:
           fetch-depth: 1
 
-      - uses: anthropics/claude-code-action@v1.0.183
+      - uses: anthropics/claude-code-action@v1.0.186
         env:
           # Route Claude Code through Microsoft Foundry (Azure billing) instead
           # of a personal Claude subscription. Resource name + API key come from
