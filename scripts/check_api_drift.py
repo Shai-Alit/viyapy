@@ -49,6 +49,7 @@ REQUIRED_ENDPOINTS = (
     "execute_mas_step",
     "list_mas_modules",
     "get_mas_module",
+    "get_mas_module_step_signature",
 )
 
 
@@ -157,6 +158,19 @@ def _check_generation(name: str, entry: dict[str, Any], problems: list[str]) -> 
                 f"!= contract {module['accept']!r}"
             )
 
+    # -- MAS step signature endpoint: path + media type ---------------------
+    step = endpoints.get("get_mas_module_step_signature")
+    if step:
+        expected = step["path"].replace("{module_id}", _MODULE).replace("{step_id}", _STEP)
+        actual = dialect.mas_step_path(_MODULE, _STEP)
+        if actual != expected:
+            problems.append(f"{tag} mas_step_path: code {actual!r} != contract {expected!r}")
+        if dialect.mas_step_media_type != step["accept"]:
+            problems.append(
+                f"{tag} step Accept: code {dialect.mas_step_media_type!r} "
+                f"!= contract {step['accept']!r}"
+            )
+
     _check_fixtures(name, contract, dialect, endpoints, problems)
 
 
@@ -227,6 +241,24 @@ def _check_fixtures(
                     )
             if not dialect.parse_module(raw).id:
                 problems.append(f"{tag} {module_file.name}: module parsed with no id")
+
+    step_ep = endpoints.get("get_mas_module_step_signature")
+    step_file = fixtures / "mas_step_signature.json"
+    if step_ep:
+        if not step_file.exists():
+            problems.append(f"{tag} missing fixture {step_file.relative_to(REPO_ROOT)}")
+        else:
+            raw = _load_json(step_file)
+            for field in step_ep.get("response_fields", []):
+                if not _has_path(raw, field):
+                    problems.append(
+                        f"{tag} fixture {step_file.name} missing response field {field!r}"
+                    )
+            sig = dialect.parse_step_signature(_MODULE, _STEP, raw)
+            if not sig.inputs and not sig.outputs:
+                problems.append(
+                    f"{tag} {step_file.name}: parser produced no input/output variables"
+                )
 
     dec_ep = endpoints.get("get_decision_content")
     dec_file = fixtures / "decision_content.json"

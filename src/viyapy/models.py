@@ -77,6 +77,43 @@ class MasModule:
 
 
 @dataclass(frozen=True)
+class Variable:
+    """A single input or output variable in a MAS step signature.
+
+    Attributes:
+        name: The variable name.
+        type: The variable's data type (e.g. ``"decimal"``, ``"string"``), if
+            reported.
+        dim: The array dimension (``0`` for a scalar), if reported.
+        size: The declared size (e.g. string length), if reported.
+    """
+
+    name: str
+    type: str | None = None
+    dim: int | None = None
+    size: int | None = None
+
+
+@dataclass(frozen=True)
+class StepSignature:
+    """The input/output signature of a MAS module step.
+
+    Attributes:
+        id: The step id (e.g. ``"execute"``).
+        module_id: The owning module id, if reported.
+        inputs: The step's declared input variables.
+        outputs: The step's declared output variables.
+        raw: The originating step payload.
+    """
+
+    id: str
+    module_id: str | None = None
+    inputs: tuple[Variable, ...] = ()
+    outputs: tuple[Variable, ...] = ()
+    raw: dict[str, Any] = field(default_factory=dict, repr=False)
+
+
+@dataclass(frozen=True)
 class ExecutionResult:
     """The result of executing a MAS module step.
 

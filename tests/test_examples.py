@@ -41,6 +41,7 @@ def test_examples_are_discovered() -> None:
         "inspect_decision.py",
         "execute_module.py",
         "list_modules.py",
+        "inspect_signature.py",
     }
 
 
@@ -61,6 +62,31 @@ def test_inspect_decision_example_runs(
     _load(EXAMPLES_DIR / "inspect_decision.py").main()
 
     assert "Demo Decision" in capsys.readouterr().out
+
+
+@responses.activate
+def test_inspect_signature_example_runs(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    responses.add(
+        responses.GET,
+        f"{BASE}/microanalyticScore/modules/m/steps/execute",
+        json={
+            "id": "execute",
+            "moduleId": "m",
+            "inputs": [{"name": "x", "type": "decimal", "dim": 0, "size": 0}],
+            "outputs": [{"name": "y", "type": "decimal", "dim": 0, "size": 0}],
+        },
+        status=200,
+    )
+    monkeypatch.setenv("VIYA_URL", BASE)
+    monkeypatch.setenv("VIYA_TOKEN", "tok")
+    monkeypatch.setenv("VIYA_MODULE", "m")
+
+    _load(EXAMPLES_DIR / "inspect_signature.py").main()
+
+    out = capsys.readouterr().out
+    assert "input: x" in out and "output: y" in out
 
 
 @responses.activate

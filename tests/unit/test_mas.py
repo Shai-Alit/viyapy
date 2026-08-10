@@ -284,3 +284,136 @@ def test_execute_percent_encodes_path_segments() -> None:
     )
     make_client().mas.execute("a/b", {}, step="c?d")
     assert "/modules/a%2Fb/steps/c%3Fd" in responses.calls[0].request.url
+
+
+# -- get_signature ---------------------------------------------------------
+
+
+@responses.activate
+@pytest.mark.parametrize("generation", ["viya4", "viya35"])
+def test_get_signature_parses_variables(
+    generation: str, load_fixture: Callable[[str, str], Any], version_for: Callable[[str], str]
+) -> None:
+    raw = load_fixture(generation, "mas_step_signature.json")
+    url = f"{BASE}/microanalyticScore/modules/api_tester1_0/steps/execute"
+    responses.add(responses.GET, url, json=raw, status=200)
+
+    sig = make_client(version_for(generation)).mas.get_signature("api_tester1_0")
+
+    assert sig.id == "execute"
+    assert sig.module_id == "api_tester1_0"
+    assert [v.name for v in sig.inputs] == ["input_string"]
+    assert sig.inputs[0].type == "string"
+    assert sig.inputs[0].dim == 0
+    assert sig.inputs[0].size == 256
+    assert [v.name for v in sig.outputs] == ["output_string"]
+    assert sig.raw["version"] in (1, 2)
+    assert (
+        responses.calls[0].request.headers["Accept"]
+        == "application/vnd.sas.microanalytic.module.step+json"
+    )
+
+
+@responses.activate
+def test_get_signature_defaults_to_execute_step() -> None:
+    url = f"{BASE}/microanalyticScore/modules/m/steps/execute"
+    responses.add(responses.GET, url, json={"inputs": [], "outputs": []}, status=200)
+    make_client().mas.get_signature("m")
+    assert responses.calls[0].request.url.endswith("/steps/execute")
+
+
+@responses.activate
+def test_get_signature_custom_step_path() -> None:
+    url = f"{BASE}/microanalyticScore/modules/m/steps/score"
+    responses.add(responses.GET, url, json={"inputs": [], "outputs": []}, status=200)
+    sig = make_client().mas.get_signature("m", step="score")
+    assert responses.calls[0].request.url.endswith("/steps/score")
+    # Identity falls back to the requested ids when the payload omits them.
+    assert sig.id == "score"
+    assert sig.module_id == "m"
+
+
+@responses.activate
+@pytest.mark.parametrize("bad", ["", "   "])
+def test_get_signature_blank_module_id_fails_fast(bad: str) -> None:
+    with pytest.raises(ViyaConfigError):
+        make_client().mas.get_signature(bad)
+    assert len(responses.calls) == 0
+
+
+@responses.activate
+def test_get_signature_blank_step_fails_fast() -> None:
+    with pytest.raises(ViyaConfigError):
+        make_client().mas.get_signature("m", step="  ")
+    assert len(responses.calls) == 0
+
+
+@responses.activate
+def test_get_signature_missing_step_raises_not_found() -> None:
+    url = f"{BASE}/microanalyticScore/modules/m/steps/gone"
+    responses.add(responses.GET, url, json={"message": "no"}, status=404)
+    with pytest.raises(ViyaNotFoundError):
+        make_client().mas.get_signature("m", step="gone")
+
+
+@responses.activate
+def test_get_signature_malformed_payload_raises_response_error() -> None:
+    # Neither an inputs nor an outputs list — not a usable signature.
+    url = f"{BASE}/microanalyticScore/modules/m/steps/execute"
+    responses.add(responses.GET, url, json={"id": "execute"}, status=200)
+    with pytest.raises(ViyaResponseError):
+        make_client().mas.get_signature("m")
+
+
+@responses.activate
+def test_get_signature_tolerates_sparse_and_nameless_variables() -> None:
+    # A nameless entry is skipped; non-int dim/size and a missing type degrade to
+    # None rather than raising. An outputs-only payload is still a valid signature.
+    url = f"{BASE}/microanalyticScore/modules/m/steps/execute"
+    responses.add(
+        responses.GET,
+        url,
+        json={
+            "inputs": [
+                {"type": "string"},  # nameless — skipped
+                {"name": "x", "dim": "n/a", "size": None},  # sparse — degrades
+            ],
+            "outputs": [{"name": "y", "type": "decimal", "dim": 0, "size": 8}],
+        },
+        status=200,
+    )
+    sig = make_client().mas.get_signature("m")
+    assert [v.name for v in sig.inputs] == ["x"]
+    assert sig.inputs[0].type is None
+    assert sig.inputs[0].dim is None
+    assert sig.inputs[0].size is None
+    assert sig.outputs[0].size == 8
+
+
+@responses.activate
+def test_get_signature_skips_non_mapping_and_non_list_arrays() -> None:
+    # `inputs` is a list holding a non-mapping entry (skipped), and `outputs` is
+    # present but not a list (degrades to an empty tuple) — a signature with only
+    # a valid `inputs` list is still usable, so this must not raise.
+    url = f"{BASE}/microanalyticScore/modules/m/steps/execute"
+    responses.add(
+        responses.GET,
+        url,
+        json={"inputs": ["not-a-mapping", {"name": "x"}], "outputs": "nope"},
+        status=200,
+    )
+    sig = make_client().mas.get_signature("m")
+    assert [v.name for v in sig.inputs] == ["x"]
+    assert sig.outputs == ()
+
+
+@responses.activate
+def test_get_signature_percent_encodes_path_segments() -> None:
+    responses.add(
+        responses.GET,
+        f"{BASE}/microanalyticScore/modules/a%2Fb/steps/c%3Fd",
+        json={"inputs": [], "outputs": []},
+        status=200,
+    )
+    make_client().mas.get_signature("a/b", step="c?d")
+    assert "/modules/a%2Fb/steps/c%3Fd" in responses.calls[0].request.url
