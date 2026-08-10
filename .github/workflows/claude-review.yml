@@ -2,6 +2,10 @@ name: Claude Review
 
 # Independent AI review of every PR. Comment-only for now (not a required
 # check) so we can tune signal-to-noise before making it blocking.
+#
+# Skip a run the same way as the Codex reviewer (ai-review.yml), so one opt-out
+# silences both bots: add the "no-ai-review" label to the PR, or put a flag in
+# the head commit message ([skip-review], [no-review], or [skip ai-review]).
 on:
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
@@ -13,15 +17,39 @@ concurrency:
 
 jobs:
   review:
-    # Skip drafts and Dependabot noise.
-    if: github.event.pull_request.draft == false && github.actor != 'dependabot[bot]'
+    # Skip drafts, Dependabot noise, and PRs carrying the opt-out label. (The
+    # commit-message flag is handled by the guard step below, since the head
+    # commit message isn't in the pull_request event payload.)
+    if: >-
+      github.event.pull_request.draft == false &&
+      github.actor != 'dependabot[bot]' &&
+      !contains(github.event.pull_request.labels.*.name, 'no-ai-review')
     runs-on: ubuntu-latest
     permissions:
       contents: read
       pull-requests: write
       id-token: write
     steps:
+      # Opt-out via the head commit message, mirroring the Codex reviewer's
+      # SKIP_RE. The message isn't in the event payload, so read it via the API;
+      # when it carries a flag, the review steps below are skipped.
+      - name: Check for a skip flag in the head commit
+        id: guard
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          message=$(gh api \
+            "repos/${{ github.repository }}/commits/${{ github.event.pull_request.head.sha }}" \
+            --jq '.commit.message' 2>/dev/null || true)
+          if printf '%s' "$message" | grep -qiE '\[(skip[- ]review|no[- ]review|skip ai[- ]?review)\]'; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            echo "::notice::Skip flag in head commit message; skipping Claude review."
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - uses: actions/checkout@v7
+        if: steps.guard.outputs.skip != 'true'
         with:
           fetch-depth: 1
 
@@ -38,6 +66,7 @@ jobs:
       # service principal had no subscription-scoped role. allow-no-subscriptions
       # lets the OIDC login succeed and still yields a usable token.
       - name: Authenticate to Azure
+        if: steps.guard.outputs.skip != 'true'
         uses: azure/login@v2
         with:
           client-id: ${{ secrets.AZURE_CLIENT_ID }}
@@ -47,6 +76,7 @@ jobs:
       # Pinned to the major tag so we pick up Foundry support (added after
       # v1.0.183). Re-pin to a specific version once verified if you prefer.
       - uses: anthropics/claude-code-action@v1
+        if: steps.guard.outputs.skip != 'true'
         env:
           # Foundry resource name (e.g. sefordfoundry) — the action builds the
           # https://<resource>.services.ai.azure.com endpoint from this.
