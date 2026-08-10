@@ -83,7 +83,13 @@ class MASClient:
         )
         return self._dialect.parse_module(raw)
 
-    def get_signature(self, module_id: str, step: str = DEFAULT_MAS_STEP) -> StepSignature:
+    def get_signature(
+        self,
+        module_id: str,
+        step: str = DEFAULT_MAS_STEP,
+        *,
+        timeout: float | tuple[float, float] | None = None,
+    ) -> StepSignature:
         """Fetch the input/output signature of a MAS module step.
 
         Use this to discover a step's expected inputs and outputs (names, types,
@@ -93,6 +99,7 @@ class MASClient:
         Args:
             module_id: The module id.
             step: The step whose signature to fetch (defaults to ``"execute"``).
+            timeout: Optional per-call timeout override for the signature request.
 
         Returns:
             The parsed :class:`StepSignature`.
@@ -109,11 +116,17 @@ class MASClient:
             "GET",
             self._dialect.mas_step_path(module_id, step),
             accept=self._dialect.mas_step_media_type,
+            timeout=timeout,
         )
         return self._dialect.parse_step_signature(module_id, step, raw)
 
     def validate(
-        self, module_id: str, inputs: Mapping[str, Any], *, step: str = DEFAULT_MAS_STEP
+        self,
+        module_id: str,
+        inputs: Mapping[str, Any],
+        *,
+        step: str = DEFAULT_MAS_STEP,
+        timeout: float | tuple[float, float] | None = None,
     ) -> StepSignature:
         """Validate ``inputs`` against a step's signature, without executing it.
 
@@ -128,6 +141,7 @@ class MASClient:
             inputs: Feature name/value mapping to validate.
             step: The step whose signature to validate against (defaults to
                 ``"execute"``).
+            timeout: Optional per-call timeout override for the signature request.
 
         Returns:
             The fetched :class:`StepSignature` (so the caller can reuse it).
@@ -139,7 +153,7 @@ class MASClient:
             ViyaValidationError: The inputs do not match the signature.
             ViyaError: On any other failure.
         """
-        signature = self.get_signature(module_id, step=step)
+        signature = self.get_signature(module_id, step=step, timeout=timeout)
         check_inputs_against_signature(signature, inputs, module_id=module_id, step=step)
         return signature
 
@@ -163,7 +177,8 @@ class MASClient:
             validate: When ``True``, fetch the step signature and validate the
                 inputs against it before executing (an extra round trip), raising
                 ``ViyaValidationError`` on a mismatch. Off by default so a normal
-                execute stays a single request.
+                execute stays a single request. Any ``timeout`` override applies
+                to the signature request as well as the execute request.
             timeout: Optional per-call timeout override (MAS execution may need a
                 longer read timeout than a metadata GET).
 
@@ -181,7 +196,7 @@ class MASClient:
         module_id = require_identifier(module_id, "module_id")
         step = require_identifier(step, "step")
         if validate:
-            self.validate(module_id, inputs, step=step)
+            self.validate(module_id, inputs, step=step, timeout=timeout)
         raw = self._http.request_json(
             "POST",
             self._dialect.mas_execute_path(module_id, step),

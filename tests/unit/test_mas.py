@@ -9,7 +9,7 @@ from typing import Any
 import pytest
 import responses
 
-from viyapy import ViyaClient
+from viyapy import StepSignature, Variable, ViyaClient
 from viyapy.exceptions import (
     ViyaConfigError,
     ViyaNotFoundError,
@@ -510,6 +510,25 @@ def test_execute_with_validate_raises_and_skips_post() -> None:
         make_client().mas.execute("m", {"wrong": 1}, validate=True)
     # The mismatch is caught before executing: only the signature GET happened.
     assert [c.request.method for c in responses.calls] == ["GET"]
+
+
+@responses.activate
+def test_execute_validate_forwards_timeout_to_signature_fetch(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # A caller-supplied timeout must also protect the pre-flight signature GET,
+    # not only the execute POST.
+    responses.add(responses.POST, _SIG_URL, json={"outputs": []})
+    client = make_client()
+    captured: dict[str, Any] = {}
+
+    def spy(module_id: str, step: str = "execute", *, timeout: Any = None) -> StepSignature:
+        captured["timeout"] = timeout
+        return StepSignature(id=step, module_id=module_id, inputs=(Variable("input_string"),))
+
+    monkeypatch.setattr(client.mas, "get_signature", spy)
+    client.mas.execute("m", {"input_string": "x"}, validate=True, timeout=(1.0, 2.0))
+    assert captured["timeout"] == (1.0, 2.0)
 
 
 @responses.activate

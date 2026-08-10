@@ -73,8 +73,10 @@ def check_inputs_against_signature(
     Args:
         signature: The step signature to check against.
         inputs: The input name/value mapping the caller intends to execute.
-        module_id: Module id for error context; falls back to ``signature.module_id``.
-        step: Step id for error context; falls back to ``signature.id``.
+        module_id: Module id for error context; when ``None``, falls back to
+            ``signature.module_id``.
+        step: Step id for error context; when ``None``, falls back to
+            ``signature.id``.
 
     Raises:
         ViyaValidationError: One or more inputs are missing or unexpected.
@@ -95,6 +97,6 @@ def check_inputs_against_signature(
         "inputs do not match the step signature — " + "; ".join(problems),
         missing=missing,
         unexpected=unexpected,
-        module_id=module_id or signature.module_id,
-        step=step or signature.id,
+        module_id=module_id if module_id is not None else signature.module_id,
+        step=step if step is not None else signature.id,
     )
