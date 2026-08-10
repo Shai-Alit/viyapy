@@ -25,21 +25,32 @@ jobs:
         with:
           fetch-depth: 1
 
-      - uses: anthropics/claude-code-action@v1.0.183
+      # The action reaches Microsoft Foundry through Azure OIDC only (no API
+      # key). This federates the workflow's GitHub OIDC token into Entra ID; the
+      # resulting Azure credential is what Claude Code uses to call the resource.
+      # The federated app/identity needs a data-plane role (e.g. Cognitive
+      # Services User) on the Foundry resource.
+      - name: Authenticate to Azure
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      # Pinned to the major tag so we pick up Foundry support (added after
+      # v1.0.183). Re-pin to a specific version once verified if you prefer.
+      - uses: anthropics/claude-code-action@v1
         env:
-          # Route Claude Code through Microsoft Foundry (Azure billing) instead
-          # of a personal Claude subscription. Resource name + API key come from
-          # the Foundry "Endpoints and keys" panel.
-          CLAUDE_CODE_USE_FOUNDRY: "1"
+          # Foundry resource name (e.g. sefordfoundry) — the action builds the
+          # https://<resource>.services.ai.azure.com endpoint from this.
           ANTHROPIC_FOUNDRY_RESOURCE: ${{ vars.ANTHROPIC_FOUNDRY_RESOURCE }}
-          ANTHROPIC_FOUNDRY_API_KEY: ${{ secrets.ANTHROPIC_FOUNDRY_API_KEY }}
           # Claude Code makes background calls to a small/fast model; point it at
           # a deployed Haiku so those resolve (deploy claude-haiku-4-5 too).
           ANTHROPIC_DEFAULT_HAIKU_MODEL: ${{ vars.CLAUDE_FOUNDRY_HAIKU_MODEL }}
         with:
-          # Foundry deployment name of the review model, e.g. claude-sonnet-5
-          # (recommended) or claude-opus-4-8. Set the CLAUDE_FOUNDRY_MODEL var.
-          model: ${{ vars.CLAUDE_FOUNDRY_MODEL }}
+          # Turn on Foundry+OIDC. The action derives CLAUDE_CODE_USE_FOUNDRY from
+          # this input; setting the env var directly is ignored.
+          use_foundry: "true"
           prompt: |
             REPO: ${{ github.repository }}
             PR NUMBER: ${{ github.event.pull_request.number }}
@@ -68,5 +79,8 @@ jobs:
             issues clearly. Only post GitHub comments — do not submit review text
             as chat messages. If the PR looks good, say so briefly.
 
+          # The review model is set with --model (the action has no `model`
+          # input). Use the Foundry deployment name, e.g. claude-sonnet-5.
           claude_args: |
+            --model ${{ vars.CLAUDE_FOUNDRY_MODEL }}
             --allowedTools "mcp__github_inline_comment__create_inline_comment,Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr view:*)"
