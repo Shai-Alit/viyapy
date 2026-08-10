@@ -25,9 +25,11 @@ AZURE_OPENAI_ENDPOINT (the Foundry base, e.g.
 ``https://<name>.services.ai.azure.com``), AZURE_OPENAI_API_KEY,
 AZURE_OPENAI_MODEL (the deployed model name, e.g. ``gpt-5.1-codex``).
 
-The Foundry **v1** API surface is used: ``{endpoint}/openai/v1/chat/completions``
+The Foundry **v1** API surface is used: ``{endpoint}/openai/v1/responses``
 with a ``Bearer`` token and the model named in the request body — no
-``api-version`` query string and no ``/deployments/`` path segment.
+``api-version`` query string and no ``/deployments/`` path segment. Codex-family
+deployments only support the Responses API; ``/chat/completions`` returns HTTP
+400 "operation is unsupported" for them.
 """
 
 from __future__ import annotations
@@ -197,21 +199,43 @@ Respond with ONLY a JSON object of this exact shape:
 }"""
 
 
+def _extract_output_text(data: dict[str, Any]) -> str:
+    """Pull the assistant text out of a Responses API payload.
+
+    The Responses API returns an ``output`` list that interleaves reasoning and
+    message items; the visible answer lives in ``message`` items as
+    ``output_text`` content. Some gateways also surface an aggregated
+    ``output_text`` string — prefer it when present.
+    """
+    aggregated = data.get("output_text")
+    if isinstance(aggregated, str) and aggregated.strip():
+        return aggregated
+    parts: list[str] = []
+    for item in data.get("output", []):
+        if not isinstance(item, dict) or item.get("type") != "message":
+            continue
+        for chunk in item.get("content", []):
+            if isinstance(chunk, dict) and chunk.get("type") in {"output_text", "text"}:
+                text = chunk.get("text")
+                if isinstance(text, str):
+                    parts.append(text)
+    return "".join(parts)
+
+
 def call_model(diff_blob: str) -> dict[str, Any]:
     endpoint = _env("AZURE_OPENAI_ENDPOINT").rstrip("/")
     model = _env("AZURE_OPENAI_MODEL")
     api_key = _env("AZURE_OPENAI_API_KEY")
 
-    url = f"{endpoint}/openai/v1/chat/completions"
+    # Codex-family deployments are served by the Responses API — the
+    # chat/completions operation is unsupported for them and returns HTTP 400.
+    url = f"{endpoint}/openai/v1/responses"
     payload = {
         "model": model,
-        "messages": [
-            {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user", "content": f"Review this pull-request diff:\n\n{diff_blob}"},
-        ],
-        "response_format": {"type": "json_object"},
-        "max_completion_tokens": MAX_OUTPUT_TOKENS,
-        "reasoning_effort": "medium",
+        "instructions": SYSTEM_PROMPT,
+        "input": f"Review this pull-request diff:\n\n{diff_blob}",
+        "max_output_tokens": MAX_OUTPUT_TOKENS,
+        "reasoning": {"effort": "medium"},
     }
     req = urllib.request.Request(url, data=json.dumps(payload).encode(), method="POST")
     req.add_header("Authorization", f"Bearer {api_key}")
@@ -223,7 +247,7 @@ def call_model(diff_blob: str) -> dict[str, Any]:
         detail = exc.read().decode(errors="replace")[:500]
         raise RuntimeError(f"Azure OpenAI call failed ({exc.code}): {detail}") from exc
 
-    content = data["choices"][0]["message"]["content"]
+    content = _extract_output_text(data)
     return _parse_json(content)
 
 
