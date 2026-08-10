@@ -54,6 +54,29 @@ def require_positive_int(value: object, name: str) -> int:
     return value
 
 
+def require_non_negative_int(value: object, name: str) -> int:
+    """Return ``value`` if it is a non-negative integer, else raise.
+
+    Used for values where zero is meaningful — e.g. a MAS ``wait_time`` of 0
+    means "submit and return immediately". SAS rejects negative or non-numeric
+    wait times, so we fail fast client-side with a clear message.
+
+    Args:
+        value: The candidate value.
+        name: Parameter name, used in the error message.
+
+    Returns:
+        The validated integer.
+
+    Raises:
+        ViyaConfigError: ``value`` is not an ``int`` (``bool`` excluded) or is
+            negative.
+    """
+    if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+        raise ViyaConfigError(f"{name} must be a non-negative integer (got {value!r})")
+    return value
+
+
 def check_inputs_against_signature(
     signature: StepSignature,
     inputs: Mapping[str, Any],

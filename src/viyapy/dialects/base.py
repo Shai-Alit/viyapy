@@ -14,6 +14,8 @@ from urllib.parse import quote
 
 from ..exceptions import ViyaResponseError
 from ..models import (
+    EXECUTION_SUBMITTED,
+    EXECUTION_TIMED_OUT,
     Decision,
     ExecutionResult,
     MasModule,
@@ -245,27 +247,34 @@ class Dialect:
         """Build an :class:`ExecutionResult` from a MAS execute payload.
 
         Flattens the generation's output list (``outputs`` or ``output``) into a
-        ``{name: value}`` mapping. Raises :class:`ViyaResponseError` if no output
-        list is present.
+        ``{name: value}`` mapping. Raises :class:`ViyaResponseError` if a
+        completed response carries no output list. The timed-out and submitted
+        modes legitimately return no outputs, so those are parsed as an empty
+        mapping rather than an error.
         """
+        state = raw.get("executionState")
         outputs = {
             item["name"]: item.get("value")
-            for item in self._raw_outputs(raw)
+            for item in self._raw_outputs(raw, state)
             if isinstance(item, Mapping) and "name" in item
         }
         return ExecutionResult(
             outputs=outputs,
-            execution_state=raw.get("executionState"),
+            execution_state=state,
             module_id=raw.get("moduleId", module_id),
             step_id=raw.get("stepId", step_id),
             raw=dict(raw),
         )
 
-    def _raw_outputs(self, raw: Mapping[str, Any]) -> list[Any]:
+    def _raw_outputs(self, raw: Mapping[str, Any], state: Any = None) -> list[Any]:
         for key in self.outputs_keys:
             value = raw.get(key)
             if isinstance(value, list):
                 return value
+        # Fire-and-forget (submitted) and timed-out runs return no outputs by
+        # design; only a completed/synchronous response is expected to have them.
+        if state in (EXECUTION_SUBMITTED, EXECUTION_TIMED_OUT):
+            return []
         raise ViyaResponseError(
             f"MAS response contains no output list (expected one of {self.outputs_keys!r})",
             response_body=dict(raw),

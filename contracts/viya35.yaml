@@ -20,6 +20,10 @@ endpoints:
     method: POST
     path: /microanalyticScore/modules/{module_id}/steps/{step_id}
     request_fields: [inputs]
+    # Optional `waitTime` query param (milliseconds) selects the execution mode:
+    # omitted = synchronous (executionState `completed`); positive = timed
+    # (`completed` or `timedOut`); 0 = fire-and-forget (`submitted`).
+    query_params: [waitTime]
     # Viya 3.5 returns synchronous results under `output` (singular).
     outputs_key: output
     response_fields: [executionState, moduleId, stepId]

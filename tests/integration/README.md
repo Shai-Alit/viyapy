@@ -28,7 +28,7 @@ If `HOST`/`TOKEN` are unset the whole generation is skipped; if only
 
 ## What each test does
 
-Per generation there are three tests, all driven by the variables above:
+Per generation there are four tests, all driven by the variables above:
 
 - **decision** (`<PREFIX>_DECISION`) — `GET`s a decision flow and checks it parses.
 - **mas execute** (`<PREFIX>_MODULE`, `<PREFIX>_INPUTS`) — executes the module
@@ -39,6 +39,9 @@ Per generation there are three tests, all driven by the variables above:
   step signature — it only asserts the endpoint returns a structured
   `ValidationResult`. Inspect `result.valid` and `result.messages` to see the
   server's verdict for your inputs.
+- **mas submit** (`<PREFIX>_MODULE`, `<PREFIX>_INPUTS`) — fire-and-forget execution
+  (`client.mas.submit(...)`, i.e. `wait_time=0`). Asserts the server returns an
+  `ExecutionResult` with `submitted` set and empty outputs.
 
 ## Running against Viya 4
 

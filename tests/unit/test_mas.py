@@ -81,6 +81,69 @@ def test_execute_missing_module_raises_not_found() -> None:
         make_client().mas.execute("gone", {"a": 1})
 
 
+# -- execution modes: wait_time / submit -----------------------------------
+
+_EXEC_URL = f"{BASE}/microanalyticScore/modules/m/steps/execute"
+
+
+@responses.activate
+def test_execute_default_sends_no_wait_time() -> None:
+    responses.add(responses.POST, _EXEC_URL, json={"outputs": [], "executionState": "completed"})
+    make_client().mas.execute("m", {"a": 1})
+    assert "waitTime" not in (responses.calls[0].request.url or "")
+
+
+@responses.activate
+def test_execute_timed_sends_wait_time_query() -> None:
+    responses.add(responses.POST, _EXEC_URL, json={"outputs": [], "executionState": "completed"})
+    make_client().mas.execute("m", {"a": 1}, wait_time=500)
+    assert "waitTime=500" in responses.calls[0].request.url
+
+
+@responses.activate
+def test_execute_timed_out_parses_empty_outputs() -> None:
+    # A timed run that ran long: no output list, executionState timedOut.
+    responses.add(responses.POST, _EXEC_URL, json={"executionState": "timedOut"})
+    result = make_client().mas.execute("m", {"a": 1}, wait_time=1)
+    assert result.timed_out is True
+    assert result.completed is False
+    assert result.outputs == {}
+
+
+@responses.activate
+def test_submit_sends_wait_time_zero_and_reports_submitted() -> None:
+    responses.add(responses.POST, _EXEC_URL, json={"executionState": "submitted"})
+    result = make_client().mas.submit("m", {"a": 1})
+    assert "waitTime=0" in responses.calls[0].request.url
+    assert result.submitted is True
+    assert result.completed is False
+    assert result.outputs == {}
+
+
+@responses.activate
+def test_execute_wait_time_zero_matches_submit() -> None:
+    responses.add(responses.POST, _EXEC_URL, json={"executionState": "submitted"})
+    result = make_client().mas.execute("m", {"a": 1}, wait_time=0)
+    assert "waitTime=0" in responses.calls[0].request.url
+    assert result.submitted is True
+
+
+@responses.activate
+@pytest.mark.parametrize("bad", [-1, 1.5, "500", True])
+def test_execute_bad_wait_time_fails_fast(bad: Any) -> None:
+    with pytest.raises(ViyaConfigError):
+        make_client().mas.execute("m", {"a": 1}, wait_time=bad)
+    assert len(responses.calls) == 0
+
+
+@responses.activate
+def test_execute_completed_without_output_list_still_raises() -> None:
+    # A *completed* response with no output list is a real error, not tolerated.
+    responses.add(responses.POST, _EXEC_URL, json={"executionState": "completed"})
+    with pytest.raises(ViyaResponseError):
+        make_client().mas.execute("m", {"a": 1})
+
+
 # -- list / get ------------------------------------------------------------
 
 

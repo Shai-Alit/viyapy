@@ -64,6 +64,16 @@ def _check_validate(client: ViyaClient, module_id: str, inputs_json: str | None)
     assert isinstance(result.messages, tuple)
 
 
+def _check_submit(client: ViyaClient, module_id: str, inputs_json: str | None) -> None:
+    inputs = json.loads(inputs_json) if inputs_json else {}
+    # Fire-and-forget: wait_time=0 returns immediately. The server reports
+    # executionState "submitted" with empty outputs.
+    result = client.mas.submit(module_id, inputs)
+    assert isinstance(result, ExecutionResult)
+    assert result.submitted is True
+    assert result.outputs == {}
+
+
 def _run(prefix: str, version: str, kind: str) -> None:
     env = _require(prefix)
     if kind == "decision":
@@ -77,6 +87,8 @@ def _run(prefix: str, version: str, kind: str) -> None:
     with ViyaClient(env["host"], env["token"], viya_version=version) as client:  # type: ignore[arg-type]
         if kind == "validate":
             _check_validate(client, env["module"], env["inputs"])
+        elif kind == "submit":
+            _check_submit(client, env["module"], env["inputs"])
         else:
             _check_mas(client, env["module"], env["inputs"])
 
@@ -96,6 +108,10 @@ def test_viya4_mas_validate() -> None:
     _run("VIYAPY_TEST_4", "4", "validate")
 
 
+def test_viya4_mas_submit() -> None:
+    _run("VIYAPY_TEST_4", "4", "submit")
+
+
 # -- Viya 3.5 (scaffold — skipped until a 3.5 instance is available) --------
 
 
@@ -109,3 +125,7 @@ def test_viya35_mas_execute() -> None:
 
 def test_viya35_mas_validate() -> None:
     _run("VIYAPY_TEST_35", "3.5", "validate")
+
+
+def test_viya35_mas_submit() -> None:
+    _run("VIYAPY_TEST_35", "3.5", "submit")

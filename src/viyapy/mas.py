@@ -10,6 +10,7 @@ from ._pagination import iter_collection
 from ._validation import (
     check_inputs_against_signature,
     require_identifier,
+    require_non_negative_int,
     require_positive_int,
 )
 from .dialects.base import DEFAULT_MAS_STEP, Dialect
@@ -233,9 +234,23 @@ class MASClient:
         *,
         step: str = DEFAULT_MAS_STEP,
         validate: bool = False,
+        wait_time: int | None = None,
         timeout: float | tuple[float, float] | None = None,
     ) -> ExecutionResult:
         """Execute a MAS module step against a mapping of inputs.
+
+        ``wait_time`` selects the execution mode (it maps to the server's
+        ``waitTime`` query parameter, in milliseconds):
+
+        - ``None`` (default) — synchronous: wait until execution completes; the
+          result carries the ``outputs`` and ``execution_state == "completed"``.
+        - a positive integer — timed: wait up to that many milliseconds. If the
+          run finishes in time the result is ``completed`` with ``outputs``;
+          otherwise ``outputs`` is empty and ``execution_state == "timedOut"``
+          (see :attr:`ExecutionResult.timed_out`).
+        - ``0`` — fire-and-forget: return immediately after validation with empty
+          ``outputs`` and ``execution_state == "submitted"``. See :meth:`submit`
+          for a named shortcut.
 
         Args:
             module_id: The published module id (for a published decision this is
@@ -248,6 +263,10 @@ class MASClient:
                 ``ViyaValidationError`` on a mismatch. Off by default so a normal
                 execute stays a single request. Any ``timeout`` override applies
                 to the signature request as well as the execute request.
+            wait_time: Server-side wait budget in milliseconds selecting the
+                execution mode (see above). Must be a non-negative integer when
+                given. This is distinct from ``timeout``, which bounds the HTTP
+                call itself.
             timeout: Optional per-call timeout override (MAS execution may need a
                 longer read timeout than a metadata GET).
 
@@ -255,15 +274,19 @@ class MASClient:
             The parsed :class:`ExecutionResult`.
 
         Raises:
-            ViyaConfigError: ``module_id`` or ``step`` is empty or not a string.
+            ViyaConfigError: ``module_id``/``step`` is empty or not a string, or
+                ``wait_time`` is not a non-negative integer.
             ViyaNotFoundError: The module or step does not exist.
-            ViyaResponseError: The response lacked an output list.
+            ViyaResponseError: A completed response lacked an output list.
             ViyaValidationError: ``validate`` is set and the inputs do not match
                 the step signature.
             ViyaError: On any other failure.
         """
         module_id = require_identifier(module_id, "module_id")
         step = require_identifier(step, "step")
+        params: dict[str, Any] | None = None
+        if wait_time is not None:
+            params = {"waitTime": require_non_negative_int(wait_time, "wait_time")}
         if validate:
             self.validate(module_id, inputs, step=step, timeout=timeout)
         raw = self._http.request_json(
@@ -271,6 +294,52 @@ class MASClient:
             self._dialect.mas_execute_path(module_id, step),
             content_type="application/json",
             json_body=self._dialect.build_inputs(inputs),
+            params=params,
             timeout=timeout,
         )
         return self._dialect.parse_execution(module_id, step, raw)
+
+    def submit(
+        self,
+        module_id: str,
+        inputs: Mapping[str, Any],
+        *,
+        step: str = DEFAULT_MAS_STEP,
+        validate: bool = False,
+        timeout: float | tuple[float, float] | None = None,
+    ) -> ExecutionResult:
+        """Submit a MAS step for fire-and-forget execution, without waiting.
+
+        A convenience for :meth:`execute` with ``wait_time=0``: the call returns
+        as soon as the server accepts the inputs, so the result has empty
+        ``outputs`` and ``execution_state == "submitted"`` (see
+        :attr:`ExecutionResult.submitted`). Use this to kick off a run whose
+        outputs you do not need in-band. MAS does not expose a per-execution
+        result-polling endpoint, so the outputs are not retrievable afterward.
+
+        Args:
+            module_id: The published module id.
+            inputs: Feature name/value mapping.
+            step: The module step to execute.
+            validate: When ``True``, validate the inputs against the step
+                signature before submitting (an extra round trip).
+            timeout: Optional per-call timeout override.
+
+        Returns:
+            The parsed :class:`ExecutionResult`, with ``submitted`` set.
+
+        Raises:
+            ViyaConfigError: ``module_id`` or ``step`` is empty or not a string.
+            ViyaNotFoundError: The module or step does not exist.
+            ViyaValidationError: ``validate`` is set and the inputs do not match
+                the step signature.
+            ViyaError: On any other failure.
+        """
+        return self.execute(
+            module_id,
+            inputs,
+            step=step,
+            validate=validate,
+            wait_time=0,
+            timeout=timeout,
+        )

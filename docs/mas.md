@@ -136,6 +136,39 @@ result.get("maybe_missing", None) # default if absent
 "output_string" in result
 ```
 
+## Execution modes: synchronous, timed, and fire-and-forget
+
+By default `execute` is **synchronous** — it waits for the run to finish and
+returns the outputs. Passing `wait_time` (milliseconds) selects a different mode.
+It maps to the server's `waitTime` and is distinct from `timeout`, which bounds
+the HTTP call itself rather than the server-side wait:
+
+```python
+# Synchronous (default): wait for completion, get outputs.
+result = client.mas.execute("api_tester1_0", inputs)
+result.completed          # True
+
+# Timed: wait up to 250 ms. If it finishes, you get outputs; if not, the run
+# keeps going server-side but the call returns early with empty outputs.
+result = client.mas.execute("api_tester1_0", inputs, wait_time=250)
+if result.timed_out:
+    ...                   # didn't finish in 250 ms; result.outputs is empty
+
+# Fire-and-forget: return as soon as the inputs are accepted.
+result = client.mas.submit("api_tester1_0", inputs)   # == execute(..., wait_time=0)
+result.submitted          # True; result.outputs is empty
+```
+
+The three [`ExecutionResult`][viyapy.ExecutionResult] helpers — `completed`,
+`timed_out`, and `submitted` — read the `execution_state` the server returned (`"completed"`, `"timedOut"`, `"submitted"`). Timed-out and
+submitted responses legitimately carry no outputs, so those are parsed as an empty
+mapping rather than an error.
+
+`wait_time` must be a non-negative integer; anything else raises
+[`ViyaConfigError`][viyapy.ViyaConfigError] before a request is issued. Note that
+MAS has no per-execution result-polling endpoint, so a `submit` result's outputs
+are not retrievable later — use fire-and-forget when you don't need them in-band.
+
 ## Inputs are built for you
 
 Pass a plain `dict` of feature names to values. viyapy serializes it to the MAS
