@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "viyapy"
-version = "3.1.0"
+version = "3.1.1.dev0"
 description = "A Python client for SAS Viya Intelligent Decisioning (Decisions + Micro Analytic Score) supporting Viya 3.5 and Viya 4."
 readme = "README.md"
 requires-python = ">=3.10"
