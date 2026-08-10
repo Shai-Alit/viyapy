@@ -21,7 +21,9 @@ from .exceptions import (
     ViyaConfigError,
     ViyaConnectionError,
     ViyaError,
+    ViyaJobError,
     ViyaNotFoundError,
+    ViyaPollTimeoutError,
     ViyaRateLimitError,
     ViyaResponseError,
     ViyaSecurityWarning,
@@ -30,6 +32,7 @@ from .exceptions import (
     ViyaValidationError,
 )
 from .models import (
+    CompileJob,
     Decision,
     ExecutionResult,
     MasModule,
@@ -54,6 +57,7 @@ _handler.addFilter(RedactingFilter())
 logging.getLogger(__name__).addHandler(_handler)
 
 __all__ = [
+    "CompileJob",
     "Decision",
     "ExecutionResult",
     "MasModule",
@@ -69,7 +73,9 @@ __all__ = [
     "ViyaConfigError",
     "ViyaConnectionError",
     "ViyaError",
+    "ViyaJobError",
     "ViyaNotFoundError",
+    "ViyaPollTimeoutError",
     "ViyaRateLimitError",
     "ViyaResponseError",
     "ViyaSecurityWarning",

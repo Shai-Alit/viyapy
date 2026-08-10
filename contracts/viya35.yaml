@@ -86,6 +86,26 @@ endpoints:
     # Returns 204 No Content (no response body).
     response_fields: []
 
+  - id: submit_mas_compile_job
+    method: POST
+    path: /microanalyticScore/jobs
+    # A compile job is submitted with the SAME module.definition body as a
+    # synchronous create (only the Accept/response envelope differs). The server
+    # accepts it 202 and compiles the module asynchronously.
+    content_type: application/vnd.sas.microanalytic.module.definition+json
+    request_fields: [id, type, scope, source]
+    accept: application/vnd.sas.microanalytic.job+json
+    # Fields the client reads off the job resource.
+    response_fields: [id, moduleId, state]
+
+  - id: get_mas_compile_job
+    method: GET
+    path: /microanalyticScore/jobs/{job_id}
+    accept: application/vnd.sas.microanalytic.job+json
+    # The job resource; `state` transitions pending -> (running) -> terminal
+    # (completed | failed). A failed job populates `errors` with diagnostics.
+    response_fields: [id, moduleId, state, errors]
+
   - id: get_mas_module_step_signature
     method: GET
     path: /microanalyticScore/modules/{module_id}/steps/{step_id}

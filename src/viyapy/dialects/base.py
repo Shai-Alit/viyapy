@@ -17,6 +17,7 @@ from ..exceptions import ViyaResponseError
 from ..models import (
     EXECUTION_SUBMITTED,
     EXECUTION_TIMED_OUT,
+    CompileJob,
     Decision,
     ExecutionResult,
     MasModule,
@@ -40,6 +41,10 @@ MAS_VALIDATION_MEDIA_TYPE = "application/vnd.sas.validation+json"
 MAS_MODULE_DEFINITION_MEDIA_TYPE = "application/vnd.sas.microanalytic.module.definition+json"
 # Accept/Content-Type of the module `/source` subresource (GET and PUT).
 MAS_MODULE_SOURCE_MEDIA_TYPE = "application/vnd.sas.microanalytic.module.source+json"
+# Accept/response type of an async compile job (`/microanalyticScore/jobs`). The
+# job is *submitted* with the same `.module.definition+json` body as a synchronous
+# create; only the response envelope differs (a `.job+json` resource).
+MAS_JOB_MEDIA_TYPE = "application/vnd.sas.microanalytic.job+json"
 
 
 def _coerce_int(value: Any) -> int | None:
@@ -82,6 +87,7 @@ class Dialect:
     mas_step_media_type: str = MAS_STEP_MEDIA_TYPE
     mas_step_input_media_type: str = MAS_STEP_INPUT_MEDIA_TYPE
     mas_validation_media_type: str = MAS_VALIDATION_MEDIA_TYPE
+    mas_job_media_type: str = MAS_JOB_MEDIA_TYPE
     outputs_keys: tuple[str, ...] = ("outputs", "output")
 
     # -- endpoint paths -----------------------------------------------------
@@ -106,6 +112,23 @@ class Dialect:
         reason as :meth:`mas_execute_path`.
         """
         return f"/microanalyticScore/modules/{quote(module_id, safe='')}/source"
+
+    def mas_jobs_path(self) -> str:
+        """Return the relative path for the MAS async compile-job collection.
+
+        A ``POST`` of a module definition here submits an asynchronous compile
+        job (returning ``202`` with the job resource) instead of blocking on a
+        synchronous ``POST /modules``.
+        """
+        return "/microanalyticScore/jobs"
+
+    def mas_job_path(self, job_id: str) -> str:
+        """Return the relative path for a single MAS compile job (poll target).
+
+        The id is percent-encoded for the same reason as
+        :meth:`mas_execute_path`, though the server assigns it as a UUID.
+        """
+        return f"/microanalyticScore/jobs/{quote(job_id, safe='')}"
 
     def mas_execute_path(self, module_id: str, step_id: str = DEFAULT_MAS_STEP) -> str:
         """Return the relative path for executing a MAS module step.
@@ -301,6 +324,40 @@ class Dialect:
             module_id=_prefer_str(raw.get("moduleId"), module_id),
             source=source,
             version=_coerce_int(raw.get("version")),
+            created_by=_str_or_none(raw.get("createdBy")),
+            modified_by=_str_or_none(raw.get("modifiedBy")),
+            creation_timestamp=_str_or_none(raw.get("creationTimeStamp")),
+            modified_timestamp=_str_or_none(raw.get("modifiedTimeStamp")),
+            raw=dict(raw),
+        )
+
+    def parse_compile_job(self, raw: Mapping[str, Any]) -> CompileJob:
+        """Build a :class:`CompileJob` from a MAS ``/jobs`` payload.
+
+        Used for both the ``POST`` submit response and each poll ``GET``; the full
+        payload is retained on :attr:`CompileJob.raw`. The ``errors`` array (which
+        a failed job populates with compiler messages) is normalized to a tuple of
+        strings.
+
+        Raises:
+            ViyaResponseError: The payload has no usable string ``id`` — without a
+                job id the result could not be polled, so a malformed response
+                fails loudly here.
+        """
+        job_id = raw.get("id")
+        if not isinstance(job_id, str) or not job_id.strip():
+            raise ViyaResponseError(
+                "MAS compile job payload has no usable 'id' field",
+                response_body=dict(raw),
+            )
+        errors_raw = raw.get("errors")
+        errors = tuple(str(item) for item in errors_raw) if isinstance(errors_raw, list) else ()
+        return CompileJob(
+            id=job_id.strip(),
+            module_id=_str_or_none(raw.get("moduleId")),
+            operation=_str_or_none(raw.get("operation")),
+            state=_str_or_none(raw.get("state")),
+            errors=errors,
             created_by=_str_or_none(raw.get("createdBy")),
             modified_by=_str_or_none(raw.get("modifiedBy")),
             creation_timestamp=_str_or_none(raw.get("creationTimeStamp")),

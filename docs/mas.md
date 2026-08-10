@@ -111,6 +111,59 @@ client.mas.delete("scorer_1_0")
 It raises [`ViyaNotFoundError`][viyapy.ViyaNotFoundError] if the module doesn't
 exist and [`ViyaConfigError`][viyapy.ViyaConfigError] for a blank `module_id`.
 
+### Compile a module asynchronously
+
+`create` above compiles synchronously — one request, the module comes back
+compiled. MAS also exposes an asynchronous path: submit a *compile job* and poll
+it to completion. Use it when a compile is slow enough to risk an HTTP read
+timeout, or when you want the job's structured diagnostics rather than an HTTP
+error envelope.
+
+The simplest way in is `create(..., wait=True)`, which submits a job, blocks until
+it finishes, and returns the compiled [`MasModule`][viyapy.MasModule] — the same
+return type as the synchronous path:
+
+```python
+module = client.mas.create(
+    "scorer_1_0",
+    ds2_source,
+    wait=True,              # compile via an async job and block until it settles
+    poll_timeout=300,       # overall wait budget in seconds (default 300)
+    poll_interval=2,        # delay between polls in seconds (default 2)
+)
+```
+
+A job that fails to compile raises [`ViyaJobError`][viyapy.ViyaJobError] carrying
+the compiler messages on `.errors` (rather than a `ViyaAPIError`); a job that
+doesn't finish within `poll_timeout` raises
+[`ViyaPollTimeoutError`][viyapy.ViyaPollTimeoutError]. The job is not cancelled on
+timeout — it may still finish server-side.
+
+For finer control, the low-level methods are exposed too. Submit without waiting,
+then poll yourself:
+
+```python
+job = client.mas.submit_compile_job("scorer_1_0", ds2_source)   # returns immediately
+job.id                     # server-assigned job id
+job.state                  # "pending" (typically), then "running", then terminal
+job.done                   # False until terminal
+
+job = client.mas.get_job(job.id)          # re-fetch current state
+job = client.mas.wait_for_job(job.id)     # or block until it reaches a terminal state
+if job.completed:
+    module = client.mas.get(job.module_id)   # the compiled module now exists
+```
+
+[`wait_for_job`][viyapy.mas.MASClient.wait_for_job] raises `ViyaJobError` on a
+failed job by default; pass `raise_on_failure=False` to instead get the failed
+[`CompileJob`][viyapy.CompileJob] back and branch on `.failed`/`.errors` yourself
+(mirroring `validate_remote(raise_on_invalid=False)`).
+
+Note that a *grossly* malformed source — one MAS cannot even parse into a package —
+is still rejected synchronously by [`submit_compile_job`][viyapy.mas.MASClient.submit_compile_job]
+as a `ViyaAPIError`; only a source that parses but fails to compile is accepted as
+a job that later reaches the `failed` state.
+
 ## Inspecting a step signature
 
 Before executing a step, you can discover the inputs it expects and the outputs

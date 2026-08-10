@@ -6,7 +6,7 @@ import dataclasses
 
 import pytest
 
-from viyapy.models import Decision, ExecutionResult, ModelStep
+from viyapy.models import CompileJob, Decision, ExecutionResult, ModelStep
 
 
 def test_model_step_defaults() -> None:
@@ -40,3 +40,29 @@ def test_execution_result_mapping_helpers() -> None:
 def test_raw_excluded_from_repr() -> None:
     step = ModelStep(name="M", raw={"big": "payload"})
     assert "big" not in repr(step)
+
+
+@pytest.mark.parametrize(
+    ("state", "completed", "failed", "done"),
+    [
+        ("pending", False, False, False),
+        ("running", False, False, False),
+        ("completed", True, False, True),
+        ("failed", False, True, True),
+        (None, False, False, False),
+    ],
+)
+def test_compile_job_state_properties(
+    state: str | None, completed: bool, failed: bool, done: bool
+) -> None:
+    job = CompileJob(id="j1", state=state)
+    assert job.completed is completed
+    assert job.failed is failed
+    assert job.done is done
+
+
+def test_compile_job_defaults() -> None:
+    job = CompileJob(id="j1")
+    assert job.module_id is None
+    assert job.errors == ()
+    assert job.raw == {}

@@ -118,6 +118,70 @@ class ViyaResponseError(ViyaError):
         self.response_body = response_body
 
 
+class ViyaPollTimeoutError(ViyaError):
+    """A polled asynchronous operation did not finish within the wait budget.
+
+    Raised by the polling helper (and callers such as
+    :meth:`~viyapy.mas.MASClient.wait_for_job`) when ``poll_timeout`` elapses
+    before the operation reaches a terminal state. The operation is not
+    cancelled — it may still complete server-side — so a caller can re-poll the
+    same resource if it wants to keep waiting.
+
+    Attributes:
+        elapsed: Approximate seconds spent polling before giving up.
+        last_state: The last state observed before the timeout, if any.
+    """
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        elapsed: float | None = None,
+        last_state: str | None = None,
+    ) -> None:
+        super().__init__(message)
+        self.message = message
+        self.elapsed = elapsed
+        self.last_state = last_state
+
+
+class ViyaJobError(ViyaError):
+    """An asynchronous SAS Viya job finished in a terminal failure state.
+
+    Raised when a polled job — for example a MAS module compile job submitted via
+    :meth:`~viyapy.mas.MASClient.submit_compile_job` — reaches a ``failed`` state.
+    Unlike :class:`ViyaAPIError`, the HTTP calls all succeeded; it is the
+    server-side work the job represents that failed, so the diagnostics come from
+    the job payload (e.g. compiler messages) rather than an HTTP error envelope.
+
+    Attributes:
+        job_id: The failed job's id.
+        module_id: The module the job targeted, if known.
+        state: The terminal state reported (e.g. ``"failed"``).
+        errors: Human-readable error strings the job reported (e.g. compile
+            diagnostics).
+        response_body: The raw job payload, when available.
+    """
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        job_id: str | None = None,
+        module_id: str | None = None,
+        state: str | None = None,
+        errors: tuple[str, ...] = (),
+        response_body: Any = None,
+    ) -> None:
+        super().__init__(message)
+        self.message = message
+        self.job_id = job_id
+        self.module_id = module_id
+        self.state = state
+        self.errors = errors
+        self.response_body = response_body
+
+
 class ViyaValidationError(ViyaError):
     """Inputs did not match a MAS step signature.
 

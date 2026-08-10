@@ -60,9 +60,13 @@ REQUIRED_ENDPOINTS = (
     "get_mas_module_source",
     "update_mas_module_source",
     "delete_mas_module",
+    "submit_mas_compile_job",
+    "get_mas_compile_job",
     "get_mas_module_step_signature",
     "validate_mas_module_step_inputs",
 )
+
+_JOB = "__JOB__"
 
 # A source-language media type used to exercise the request-body builders below.
 _SOURCE_TYPE = "text/vnd.sas.source.ds2"
@@ -283,6 +287,60 @@ def _check_generation(name: str, entry: dict[str, Any], problems: list[str]) -> 
                 f"{tag} contract declares delete_mas_module but MASClient.delete is missing"
             )
 
+    # -- MAS async compile job submit: path, content type, body, accept -----
+    submit = endpoints.get("submit_mas_compile_job")
+    if submit:
+        if dialect.mas_jobs_path() != submit["path"]:
+            problems.append(
+                f"{tag} submit job path: code {dialect.mas_jobs_path()!r} "
+                f"!= contract {submit['path']!r}"
+            )
+        if dialect.mas_module_definition_media_type != submit["content_type"]:
+            problems.append(
+                f"{tag} submit job Content-Type: code "
+                f"{dialect.mas_module_definition_media_type!r} "
+                f"!= contract {submit['content_type']!r}"
+            )
+        if dialect.mas_job_media_type != submit["accept"]:
+            problems.append(
+                f"{tag} submit job Accept: code {dialect.mas_job_media_type!r} "
+                f"!= contract {submit['accept']!r}"
+            )
+        # The job is submitted with the same module.definition body as a create.
+        built = list(
+            dialect.build_module_definition(
+                _MODULE, "src", source_type=_SOURCE_TYPE, scope="public"
+            ).keys()
+        )
+        if built != submit["request_fields"]:
+            problems.append(
+                f"{tag} submit job request body keys: code {built} "
+                f"!= contract {submit['request_fields']}"
+            )
+        if not hasattr(MASClient, "submit_compile_job"):
+            problems.append(
+                f"{tag} contract declares submit_mas_compile_job but "
+                "MASClient.submit_compile_job is missing"
+            )
+
+    # -- MAS async compile job poll: path + media type ----------------------
+    get_job = endpoints.get("get_mas_compile_job")
+    if get_job:
+        expected = get_job["path"].replace("{job_id}", _JOB)
+        actual = dialect.mas_job_path(_JOB)
+        if actual != expected:
+            problems.append(f"{tag} mas_job_path: code {actual!r} != contract {expected!r}")
+        if dialect.mas_job_media_type != get_job["accept"]:
+            problems.append(
+                f"{tag} job Accept: code {dialect.mas_job_media_type!r} "
+                f"!= contract {get_job['accept']!r}"
+            )
+        for method in ("get_job", "wait_for_job"):
+            if not hasattr(MASClient, method):
+                problems.append(
+                    f"{tag} contract declares get_mas_compile_job but MASClient.{method} is missing"
+                )
+
     # -- MAS step signature endpoint: path + media type ---------------------
     step = endpoints.get("get_mas_module_step_signature")
     if step:
@@ -404,6 +462,32 @@ def _check_fixtures(
             parsed = dialect.parse_module_source(_MODULE, raw)
             if not parsed.source:
                 problems.append(f"{tag} {src_file.name}: parser produced no source text")
+
+    # The submit and poll endpoints share the job resource shape; check the poll
+    # fixtures (pending/completed/failed) round-trip through the job parser.
+    job_ep = endpoints.get("get_mas_compile_job") or endpoints.get("submit_mas_compile_job")
+    if job_ep:
+        for job_name in (
+            "mas_compile_job_pending.json",
+            "mas_compile_job_completed.json",
+            "mas_compile_job_failed.json",
+        ):
+            job_file = fixtures / job_name
+            if not job_file.exists():
+                problems.append(f"{tag} missing fixture {job_file.relative_to(REPO_ROOT)}")
+                continue
+            raw = _load_json(job_file)
+            for field in job_ep.get("response_fields", []):
+                if not _has_path(raw, field):
+                    problems.append(f"{tag} fixture {job_name} missing response field {field!r}")
+            parsed = dialect.parse_compile_job(raw)
+            if not parsed.id:
+                problems.append(f"{tag} {job_name}: job parsed with no id")
+            # The failed fixture must round-trip to a failed job carrying errors.
+            if job_name.endswith("failed.json") and not (parsed.failed and parsed.errors):
+                problems.append(f"{tag} {job_name}: parser did not read a failed job with errors")
+            if job_name.endswith("completed.json") and not parsed.completed:
+                problems.append(f"{tag} {job_name}: parser did not read a completed job")
 
     step_ep = endpoints.get("get_mas_module_step_signature")
     step_file = fixtures / "mas_step_signature.json"

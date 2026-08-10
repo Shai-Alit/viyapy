@@ -19,6 +19,7 @@ import os
 import pytest
 
 from viyapy import (
+    CompileJob,
     Decision,
     ExecutionResult,
     MasModule,
@@ -131,6 +132,52 @@ def _check_crud(client: ViyaClient) -> None:
             client.mas.delete(module_id)
 
 
+# A source that parses into a valid package but fails to *compile* (it calls a
+# function that doesn't exist). MAS accepts this as a job that then reaches the
+# ``failed`` state — the async failure path, distinct from a synchronous 400.
+_COMPILE_FAIL_DS2_SOURCE = (
+    "package viyapy_jobfail / overwrite=yes;\n"
+    "  method execute(int in_val, in_out int out_val);\n"
+    "    out_val = viyapy_nonexistent_func(in_val);\n"
+    "  end;\n"
+    "endpackage;\n"
+)
+
+
+def _check_compile_job(client: ViyaClient) -> None:
+    # Full async-compile lifecycle against the live server: submit a compile job,
+    # poll it to completion, confirm the module now exists, then delete it. Also
+    # exercises the failure path (a parse-ok/compile-fail source -> failed job).
+    module_id = f"viyapy_job_{os.getpid()}"
+    created = False
+    try:
+        job = client.mas.submit_compile_job(module_id, _CRUD_DS2_SOURCE)
+        assert isinstance(job, CompileJob)
+        assert job.id
+        assert not job.done  # accepted asynchronously (typically "pending")
+
+        done = client.mas.wait_for_job(job.id)
+        assert done.completed
+        created = True
+
+        # The compiled module is now real and fetchable.
+        module = client.mas.get(done.module_id or module_id)
+        assert isinstance(module, MasModule)
+        assert module.id == module_id
+
+        # Failure path: a source that compiles-fails yields a terminal failed job
+        # carrying diagnostics (not an HTTP error), when not raising.
+        failed = client.mas.wait_for_job(
+            client.mas.submit_compile_job(f"{module_id}_bad", _COMPILE_FAIL_DS2_SOURCE).id,
+            raise_on_failure=False,
+        )
+        assert failed.failed
+        assert failed.errors
+    finally:
+        if created:
+            client.mas.delete(module_id)
+
+
 def _run(prefix: str, version: str, kind: str) -> None:
     env = _require(prefix)
     if kind == "decision":
@@ -146,6 +193,14 @@ def _run(prefix: str, version: str, kind: str) -> None:
             pytest.skip(f"{prefix}_ALLOW_CRUD not set (module-mutating test)")
         with ViyaClient(env["host"], env["token"], viya_version=version) as client:  # type: ignore[arg-type]
             _check_crud(client)
+        return
+    if kind == "compile_job":
+        # Async compile creates and deletes a module too, so gate it behind the
+        # same explicit opt-in as the CRUD lifecycle.
+        if not os.getenv(f"{prefix}_ALLOW_CRUD"):
+            pytest.skip(f"{prefix}_ALLOW_CRUD not set (module-mutating test)")
+        with ViyaClient(env["host"], env["token"], viya_version=version) as client:  # type: ignore[arg-type]
+            _check_compile_job(client)
         return
     if not env["module"]:
         pytest.skip(f"{prefix}_MODULE not set")
@@ -187,6 +242,10 @@ def test_viya4_mas_crud() -> None:
     _run("VIYAPY_TEST_4", "4", "crud")
 
 
+def test_viya4_mas_compile_job() -> None:
+    _run("VIYAPY_TEST_4", "4", "compile_job")
+
+
 # -- Viya 3.5 (scaffold — skipped until a 3.5 instance is available) --------
 
 
@@ -212,3 +271,7 @@ def test_viya35_mas_metadata() -> None:
 
 def test_viya35_mas_crud() -> None:
     _run("VIYAPY_TEST_35", "3.5", "crud")
+
+
+def test_viya35_mas_compile_job() -> None:
+    _run("VIYAPY_TEST_35", "3.5", "compile_job")

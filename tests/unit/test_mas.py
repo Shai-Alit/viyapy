@@ -10,11 +10,20 @@ from typing import Any
 import pytest
 import responses
 
-from viyapy import ModuleSource, StepSignature, ValidationResult, Variable, ViyaClient
+from viyapy import (
+    CompileJob,
+    ModuleSource,
+    StepSignature,
+    ValidationResult,
+    Variable,
+    ViyaClient,
+)
 from viyapy.exceptions import (
     ViyaAPIError,
     ViyaConfigError,
+    ViyaJobError,
     ViyaNotFoundError,
+    ViyaPollTimeoutError,
     ViyaResponseError,
     ViyaServerError,
     ViyaValidationError,
@@ -1291,3 +1300,236 @@ def test_delete_percent_encodes_module_id() -> None:
     responses.add(responses.DELETE, f"{BASE}/microanalyticScore/modules/a%2Fb", status=204)
     make_client().mas.delete("a/b")
     assert "/modules/a%2Fb" in responses.calls[0].request.url
+
+
+# -- async compile jobs ----------------------------------------------------
+
+_JOBS_URL = f"{BASE}/microanalyticScore/jobs"
+_JOB_ID = "a1b2c3d4-0000-4a5b-8c9d-000000000001"
+_JOB_URL = f"{_JOBS_URL}/{_JOB_ID}"
+
+
+@responses.activate
+@pytest.mark.parametrize("generation", ["viya4", "viya35"])
+def test_submit_compile_job_posts_definition_and_parses_pending(
+    generation: str, load_fixture: Callable[[str, str], Any], version_for: Callable[[str], str]
+) -> None:
+    raw = load_fixture(generation, "mas_compile_job_pending.json")
+    responses.add(responses.POST, _JOBS_URL, json=raw, status=202)
+
+    job = make_client(version_for(generation)).mas.submit_compile_job("api_tester1_0", _DS2_SOURCE)
+
+    assert isinstance(job, CompileJob)
+    assert job.id == _JOB_ID
+    assert job.module_id == "api_tester1_0"
+    assert job.state == "pending"
+    assert not job.done
+    req = responses.calls[0].request
+    # The job is submitted with the same `.definition+json` body as a create, but
+    # asks for the `.job+json` envelope back.
+    assert req.headers["Content-Type"] == "application/vnd.sas.microanalytic.module.definition+json"
+    assert req.headers["Accept"] == "application/vnd.sas.microanalytic.job+json"
+    assert json.loads(req.body) == {
+        "id": "api_tester1_0",
+        "type": "text/vnd.sas.source.ds2",
+        "scope": "public",
+        "source": _DS2_SOURCE,
+    }
+
+
+@responses.activate
+def test_submit_compile_job_python_language_maps_media_type() -> None:
+    responses.add(responses.POST, _JOBS_URL, json={"id": _JOB_ID, "state": "pending"}, status=202)
+    make_client().mas.submit_compile_job("m", "def execute(a):\n    return a", language="python")
+    assert json.loads(responses.calls[0].request.body)["type"] == "text/x-python"
+
+
+@responses.activate
+@pytest.mark.parametrize("bad", ["", "   "])
+def test_submit_compile_job_blank_module_id_fails_fast(bad: str) -> None:
+    with pytest.raises(ViyaConfigError):
+        make_client().mas.submit_compile_job(bad, _DS2_SOURCE)
+    assert len(responses.calls) == 0
+
+
+@responses.activate
+def test_submit_compile_job_unparseable_source_propagates() -> None:
+    # A source MAS cannot even parse is rejected synchronously (400), not accepted
+    # as a job — it must surface as an API error.
+    responses.add(responses.POST, _JOBS_URL, json={"message": "no package"}, status=400)
+    with pytest.raises(ViyaAPIError):
+        make_client().mas.submit_compile_job("m", _DS2_SOURCE)
+
+
+@responses.activate
+def test_submit_compile_job_missing_id_raises_response_error() -> None:
+    responses.add(responses.POST, _JOBS_URL, json={"state": "pending"}, status=202)
+    with pytest.raises(ViyaResponseError):
+        make_client().mas.submit_compile_job("m", _DS2_SOURCE)
+
+
+@responses.activate
+@pytest.mark.parametrize("generation", ["viya4", "viya35"])
+def test_get_job_parses_payload(
+    generation: str, load_fixture: Callable[[str, str], Any], version_for: Callable[[str], str]
+) -> None:
+    raw = load_fixture(generation, "mas_compile_job_completed.json")
+    responses.add(responses.GET, _JOB_URL, json=raw, status=200)
+
+    job = make_client(version_for(generation)).mas.get_job(_JOB_ID)
+
+    assert job.id == _JOB_ID
+    assert job.completed
+    assert job.done
+    assert (
+        responses.calls[0].request.headers["Accept"] == "application/vnd.sas.microanalytic.job+json"
+    )
+
+
+@responses.activate
+@pytest.mark.parametrize("bad", ["", "   "])
+def test_get_job_blank_id_fails_fast(bad: str) -> None:
+    with pytest.raises(ViyaConfigError):
+        make_client().mas.get_job(bad)
+    assert len(responses.calls) == 0
+
+
+@responses.activate
+def test_get_job_percent_encodes_id() -> None:
+    responses.add(
+        responses.GET,
+        f"{_JOBS_URL}/a%2Fb",
+        json={"id": "a/b", "state": "completed"},
+        status=200,
+    )
+    make_client().mas.get_job("a/b")
+    assert "/jobs/a%2Fb" in responses.calls[0].request.url
+
+
+@responses.activate
+def test_get_job_missing_raises_not_found() -> None:
+    responses.add(responses.GET, _JOB_URL, json={"message": "no"}, status=404)
+    with pytest.raises(ViyaNotFoundError):
+        make_client().mas.get_job(_JOB_ID)
+
+
+@responses.activate
+def test_wait_for_job_polls_until_completed(load_fixture: Callable[[str, str], Any]) -> None:
+    pending = load_fixture("viya4", "mas_compile_job_pending.json")
+    completed = load_fixture("viya4", "mas_compile_job_completed.json")
+    # Two pending polls then a completed one; `responses` returns queued responses
+    # for the same URL in order.
+    responses.add(responses.GET, _JOB_URL, json=pending, status=200)
+    responses.add(responses.GET, _JOB_URL, json=pending, status=200)
+    responses.add(responses.GET, _JOB_URL, json=completed, status=200)
+
+    job = make_client().mas.wait_for_job(_JOB_ID, poll_interval=0.001, poll_timeout=5)
+
+    assert job.completed
+    assert len(responses.calls) == 3
+
+
+@responses.activate
+def test_wait_for_job_raises_job_error_on_failure(load_fixture: Callable[[str, str], Any]) -> None:
+    failed = load_fixture("viya4", "mas_compile_job_failed.json")
+    responses.add(responses.GET, _JOB_URL, json=failed, status=200)
+
+    with pytest.raises(ViyaJobError) as excinfo:
+        make_client().mas.wait_for_job(_JOB_ID, poll_interval=0.001, poll_timeout=5)
+
+    err = excinfo.value
+    assert err.job_id == failed["id"]
+    assert err.state == "failed"
+    assert err.errors  # compiler diagnostics carried through
+    assert "Unknown function" in "; ".join(err.errors)
+
+
+@responses.activate
+def test_wait_for_job_returns_failed_when_not_raising(
+    load_fixture: Callable[[str, str], Any],
+) -> None:
+    failed = load_fixture("viya4", "mas_compile_job_failed.json")
+    responses.add(responses.GET, _JOB_URL, json=failed, status=200)
+
+    job = make_client().mas.wait_for_job(
+        _JOB_ID, raise_on_failure=False, poll_interval=0.001, poll_timeout=5
+    )
+
+    assert job.failed
+    assert job.errors
+
+
+@responses.activate
+def test_wait_for_job_times_out(load_fixture: Callable[[str, str], Any]) -> None:
+    pending = load_fixture("viya4", "mas_compile_job_pending.json")
+    # Always pending; `responses` repeats the last registered match, so the poll
+    # never reaches a terminal state and the tiny budget expires.
+    responses.add(responses.GET, _JOB_URL, json=pending, status=200)
+
+    with pytest.raises(ViyaPollTimeoutError) as excinfo:
+        make_client().mas.wait_for_job(_JOB_ID, poll_interval=0.001, poll_timeout=0.001)
+
+    assert excinfo.value.last_state == "pending"
+
+
+@responses.activate
+@pytest.mark.parametrize("bad", ["", "   "])
+def test_wait_for_job_blank_id_fails_fast(bad: str) -> None:
+    with pytest.raises(ViyaConfigError):
+        make_client().mas.wait_for_job(bad)
+    assert len(responses.calls) == 0
+
+
+@responses.activate
+def test_create_wait_true_submits_polls_and_returns_module(
+    load_fixture: Callable[[str, str], Any],
+) -> None:
+    pending = load_fixture("viya4", "mas_compile_job_pending.json")
+    completed = load_fixture("viya4", "mas_compile_job_completed.json")
+    module = load_fixture("viya4", "mas_module.json")
+    responses.add(responses.POST, _JOBS_URL, json=pending, status=202)
+    responses.add(responses.GET, _JOB_URL, json=completed, status=200)
+    responses.add(
+        responses.GET,
+        f"{BASE}/microanalyticScore/modules/api_tester1_0",
+        json=module,
+        status=200,
+    )
+
+    result = make_client().mas.create(
+        "api_tester1_0", _DS2_SOURCE, wait=True, poll_interval=0.001, poll_timeout=5
+    )
+
+    assert result.id == "api_tester1_0"
+    # Async path: POST /jobs, then poll GET /jobs/{id}, then fetch the module —
+    # no synchronous POST /modules.
+    methods_paths = [(c.request.method, c.request.url) for c in responses.calls]
+    assert methods_paths[0][0] == "POST" and methods_paths[0][1].endswith("/jobs")
+    assert methods_paths[1][0] == "GET" and "/jobs/" in methods_paths[1][1]
+    assert methods_paths[-1][1].endswith("/modules/api_tester1_0")
+
+
+@responses.activate
+def test_create_wait_true_raises_job_error_on_compile_failure(
+    load_fixture: Callable[[str, str], Any],
+) -> None:
+    pending = load_fixture("viya4", "mas_compile_job_pending.json")
+    failed = load_fixture("viya4", "mas_compile_job_failed.json")
+    responses.add(responses.POST, _JOBS_URL, json=pending, status=202)
+    responses.add(responses.GET, _JOB_URL, json=failed, status=200)
+
+    with pytest.raises(ViyaJobError):
+        make_client().mas.create(
+            "api_tester1_0", _DS2_SOURCE, wait=True, poll_interval=0.001, poll_timeout=5
+        )
+    # The module is never fetched when the job fails.
+    assert not any(c.request.url.endswith("/modules/api_tester1_0") for c in responses.calls)
+
+
+@responses.activate
+def test_create_wait_false_uses_synchronous_post_modules() -> None:
+    responses.add(responses.POST, _MODULES_URL, json={"id": "m"}, status=201)
+    make_client().mas.create("m", _DS2_SOURCE)
+    # Default path stays a single synchronous create; no job collection is touched.
+    assert len(responses.calls) == 1
+    assert responses.calls[0].request.url.endswith("/microanalyticScore/modules")
