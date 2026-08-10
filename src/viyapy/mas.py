@@ -7,7 +7,11 @@ from typing import Any
 
 from ._http import HttpClient
 from ._pagination import iter_collection
-from ._validation import require_identifier, require_positive_int
+from ._validation import (
+    check_inputs_against_signature,
+    require_identifier,
+    require_positive_int,
+)
 from .dialects.base import DEFAULT_MAS_STEP, Dialect
 from .models import ExecutionResult, MasModule, StepSignature
 
@@ -108,12 +112,44 @@ class MASClient:
         )
         return self._dialect.parse_step_signature(module_id, step, raw)
 
+    def validate(
+        self, module_id: str, inputs: Mapping[str, Any], *, step: str = DEFAULT_MAS_STEP
+    ) -> StepSignature:
+        """Validate ``inputs`` against a step's signature, without executing it.
+
+        Fetches the step signature and checks that the supplied input names match
+        what the step declares, raising :class:`~viyapy.exceptions.ViyaValidationError`
+        if a declared input is missing or an undeclared input was supplied. Only the
+        set of names is checked, not values or types. Useful as a pre-flight before
+        :meth:`execute`, or to validate a form the user is filling in.
+
+        Args:
+            module_id: The module id.
+            inputs: Feature name/value mapping to validate.
+            step: The step whose signature to validate against (defaults to
+                ``"execute"``).
+
+        Returns:
+            The fetched :class:`StepSignature` (so the caller can reuse it).
+
+        Raises:
+            ViyaConfigError: ``module_id`` or ``step`` is empty or not a string.
+            ViyaNotFoundError: No such module or step exists.
+            ViyaResponseError: The response was not a usable step signature.
+            ViyaValidationError: The inputs do not match the signature.
+            ViyaError: On any other failure.
+        """
+        signature = self.get_signature(module_id, step=step)
+        check_inputs_against_signature(signature, inputs, module_id=module_id, step=step)
+        return signature
+
     def execute(
         self,
         module_id: str,
         inputs: Mapping[str, Any],
         *,
         step: str = DEFAULT_MAS_STEP,
+        validate: bool = False,
         timeout: float | tuple[float, float] | None = None,
     ) -> ExecutionResult:
         """Execute a MAS module step against a mapping of inputs.
@@ -124,6 +160,10 @@ class MASClient:
             inputs: Feature name/value mapping. Serialized as JSON — values are
                 passed through unchanged (no name-mangling).
             step: The module step to execute.
+            validate: When ``True``, fetch the step signature and validate the
+                inputs against it before executing (an extra round trip), raising
+                ``ViyaValidationError`` on a mismatch. Off by default so a normal
+                execute stays a single request.
             timeout: Optional per-call timeout override (MAS execution may need a
                 longer read timeout than a metadata GET).
 
@@ -134,10 +174,14 @@ class MASClient:
             ViyaConfigError: ``module_id`` or ``step`` is empty or not a string.
             ViyaNotFoundError: The module or step does not exist.
             ViyaResponseError: The response lacked an output list.
+            ViyaValidationError: ``validate`` is set and the inputs do not match
+                the step signature.
             ViyaError: On any other failure.
         """
         module_id = require_identifier(module_id, "module_id")
         step = require_identifier(step, "step")
+        if validate:
+            self.validate(module_id, inputs, step=step)
         raw = self._http.request_json(
             "POST",
             self._dialect.mas_execute_path(module_id, step),

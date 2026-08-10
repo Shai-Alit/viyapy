@@ -33,6 +33,7 @@ def test_exception_names_are_exported() -> None:
         "ViyaRateLimitError",
         "ViyaServerError",
         "ViyaResponseError",
+        "ViyaValidationError",
     ]:
         assert name in viyapy.__all__
 

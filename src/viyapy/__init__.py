@@ -27,6 +27,7 @@ from .exceptions import (
     ViyaSecurityWarning,
     ViyaServerError,
     ViyaTimeoutError,
+    ViyaValidationError,
 )
 from .models import Decision, ExecutionResult, MasModule, ModelStep, StepSignature, Variable
 
@@ -63,5 +64,6 @@ __all__ = [
     "ViyaSecurityWarning",
     "ViyaServerError",
     "ViyaTimeoutError",
+    "ViyaValidationError",
     "__version__",
 ]

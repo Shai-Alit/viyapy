@@ -118,6 +118,40 @@ class ViyaResponseError(ViyaError):
         self.response_body = response_body
 
 
+class ViyaValidationError(ViyaError):
+    """Inputs did not match a MAS step signature, caught client-side before executing.
+
+    Raised by client-side validation (:meth:`~viyapy.mas.MASClient.validate` or
+    :meth:`~viyapy.mas.MASClient.execute` with ``validate=True``) when the supplied
+    inputs do not match the step's declared signature — a declared input is missing,
+    or an undeclared input was supplied. SAS Viya rejects a mismatched signature
+    regardless, but the failure otherwise surfaces deep in the execution chain;
+    raising locally fails fast and names the offending input directly.
+
+    Attributes:
+        missing: Declared input names that were not supplied (sorted).
+        unexpected: Supplied input names the signature does not declare (sorted).
+        module_id: The module whose signature was checked, if known.
+        step: The step whose signature was checked, if known.
+    """
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        missing: tuple[str, ...] = (),
+        unexpected: tuple[str, ...] = (),
+        module_id: str | None = None,
+        step: str | None = None,
+    ) -> None:
+        super().__init__(message)
+        self.message = message
+        self.missing = missing
+        self.unexpected = unexpected
+        self.module_id = module_id
+        self.step = step
+
+
 class ViyaSecurityWarning(UserWarning):
     """Warning for security-relevant configuration.
 
