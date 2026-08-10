@@ -9,6 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Client-side MAS input validation: `client.mas.validate(module_id, inputs,
+  step="execute")` fetches the step signature and checks the supplied input names
+  against it, raising the new `ViyaValidationError` (exported from the package
+  root) when a declared input is missing or an undeclared one is supplied — the
+  offending names are on `.missing`/`.unexpected`, with `.module_id`/`.step` for
+  context. `execute` gains an opt-in `validate=True` that runs the same check
+  before executing (an extra round trip; off by default so a normal execute stays
+  a single request). Only names are checked, not values or types, to avoid false
+  positives against Viya's permissive numeric coercion.
 - MAS step signatures: `client.mas.get_signature(module_id, step="execute")`
   fetches a module step's input/output signature as the new typed
   `StepSignature` (with `inputs`/`outputs` tuples of `Variable(name, type, dim,

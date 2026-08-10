@@ -49,10 +49,6 @@ sig.module_id                           # "api_tester1_0"
 [v.name for v in sig.inputs]            # ["input_string"]
 sig.inputs[0].type                      # "string"
 sig.outputs[0].name                     # "output_string"
-
-# Handy for validating a payload before you execute:
-expected = {v.name for v in sig.inputs}
-missing = expected - payload.keys()
 ```
 
 Pass `step=` to inspect a named step other than `execute`. `get_signature` raises
@@ -60,6 +56,31 @@ Pass `step=` to inspect a named step other than `execute`. `get_signature` raise
 exist, [`ViyaConfigError`][viyapy.ViyaConfigError] for a blank `module_id`/`step`
 (before any request), and [`ViyaResponseError`][viyapy.ViyaResponseError] if the
 response isn't a usable signature.
+
+## Validating inputs
+
+Rather than compare names by hand, [`validate`][viyapy.mas.MASClient.validate]
+fetches the signature and checks your inputs against it, raising
+[`ViyaValidationError`][viyapy.ViyaValidationError] if a declared input is missing
+or an undeclared one was supplied:
+
+```python
+try:
+    client.mas.validate("api_tester1_0", {"input_string": "hi"})
+except ViyaValidationError as err:
+    err.missing      # names the step declares but you didn't supply
+    err.unexpected   # names you supplied that the step doesn't declare
+```
+
+Only the *names* are checked, not the values or types — SAS Viya coerces numeric
+types permissively, so a stricter type check would report false mismatches.
+`validate` returns the fetched `StepSignature`, so you can reuse it. To validate
+as part of executing (one call, at the cost of an extra round trip to fetch the
+signature), pass `validate=True` to [`execute`](#execute-a-module):
+
+```python
+result = client.mas.execute("api_tester1_0", inputs, validate=True)
+```
 
 ## Execute a module
 

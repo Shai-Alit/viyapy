@@ -9,12 +9,13 @@ from typing import Any
 import pytest
 import responses
 
-from viyapy import ViyaClient
+from viyapy import StepSignature, Variable, ViyaClient
 from viyapy.exceptions import (
     ViyaConfigError,
     ViyaNotFoundError,
     ViyaResponseError,
     ViyaServerError,
+    ViyaValidationError,
 )
 
 BASE = "https://viya.example.com"
@@ -417,3 +418,123 @@ def test_get_signature_percent_encodes_path_segments() -> None:
     )
     make_client().mas.get_signature("a/b", step="c?d")
     assert "/modules/a%2Fb/steps/c%3Fd" in responses.calls[0].request.url
+
+
+# -- validate (client-side) ------------------------------------------------
+
+
+_SIG_URL = f"{BASE}/microanalyticScore/modules/m/steps/execute"
+_ONE_INPUT_SIG = {
+    "id": "execute",
+    "moduleId": "m",
+    "inputs": [{"name": "input_string", "type": "string", "dim": 0, "size": 256}],
+    "outputs": [{"name": "output_string", "type": "string", "dim": 0, "size": 256}],
+}
+
+
+@responses.activate
+def test_validate_passes_when_inputs_match() -> None:
+    responses.add(responses.GET, _SIG_URL, json=_ONE_INPUT_SIG, status=200)
+    sig = make_client().mas.validate("m", {"input_string": "hi"})
+    # Returns the fetched signature and issues exactly the one signature GET.
+    assert sig.id == "execute"
+    assert [v.name for v in sig.inputs] == ["input_string"]
+    assert len(responses.calls) == 1
+    assert responses.calls[0].request.method == "GET"
+
+
+@responses.activate
+def test_validate_raises_on_missing_input() -> None:
+    responses.add(responses.GET, _SIG_URL, json=_ONE_INPUT_SIG, status=200)
+    with pytest.raises(ViyaValidationError) as excinfo:
+        make_client().mas.validate("m", {})
+    err = excinfo.value
+    assert err.missing == ("input_string",)
+    assert err.unexpected == ()
+    assert err.module_id == "m"
+    assert err.step == "execute"
+    assert "missing required input(s): input_string" in str(err)
+
+
+@responses.activate
+def test_validate_raises_on_unexpected_input() -> None:
+    responses.add(responses.GET, _SIG_URL, json=_ONE_INPUT_SIG, status=200)
+    with pytest.raises(ViyaValidationError) as excinfo:
+        make_client().mas.validate("m", {"input_string": "hi", "bogus": 1})
+    err = excinfo.value
+    assert err.missing == ()
+    assert err.unexpected == ("bogus",)
+    assert "unexpected input(s): bogus" in str(err)
+
+
+@responses.activate
+def test_validate_reports_both_missing_and_unexpected_sorted() -> None:
+    responses.add(
+        responses.GET,
+        _SIG_URL,
+        json={"id": "execute", "moduleId": "m", "inputs": [{"name": "a"}, {"name": "b"}]},
+        status=200,
+    )
+    with pytest.raises(ViyaValidationError) as excinfo:
+        make_client().mas.validate("m", {"a": 1, "z": 2, "y": 3})
+    err = excinfo.value
+    assert err.missing == ("b",)
+    assert err.unexpected == ("y", "z")  # sorted, deterministic
+
+
+@responses.activate
+@pytest.mark.parametrize("bad", ["", "   "])
+def test_validate_blank_module_id_fails_fast(bad: str) -> None:
+    with pytest.raises(ViyaConfigError):
+        make_client().mas.validate(bad, {"a": 1})
+    assert len(responses.calls) == 0
+
+
+@responses.activate
+def test_execute_with_validate_checks_then_executes() -> None:
+    responses.add(responses.GET, _SIG_URL, json=_ONE_INPUT_SIG, status=200)
+    responses.add(
+        responses.POST, _SIG_URL, json={"outputs": [{"name": "output_string", "value": "ok"}]}
+    )
+    result = make_client().mas.execute("m", {"input_string": "hi"}, validate=True)
+    assert result.outputs["output_string"] == "ok"
+    # A signature GET precedes the execute POST.
+    assert [c.request.method for c in responses.calls] == ["GET", "POST"]
+
+
+@responses.activate
+def test_execute_with_validate_raises_and_skips_post() -> None:
+    responses.add(responses.GET, _SIG_URL, json=_ONE_INPUT_SIG, status=200)
+    responses.add(responses.POST, _SIG_URL, json={"outputs": []})
+    with pytest.raises(ViyaValidationError):
+        make_client().mas.execute("m", {"wrong": 1}, validate=True)
+    # The mismatch is caught before executing: only the signature GET happened.
+    assert [c.request.method for c in responses.calls] == ["GET"]
+
+
+@responses.activate
+def test_execute_validate_forwards_timeout_to_signature_fetch(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # A caller-supplied timeout must also protect the pre-flight signature GET,
+    # not only the execute POST.
+    responses.add(responses.POST, _SIG_URL, json={"outputs": []})
+    client = make_client()
+    captured: dict[str, Any] = {}
+
+    def spy(module_id: str, step: str = "execute", *, timeout: Any = None) -> StepSignature:
+        captured["timeout"] = timeout
+        return StepSignature(id=step, module_id=module_id, inputs=(Variable("input_string"),))
+
+    monkeypatch.setattr(client.mas, "get_signature", spy)
+    client.mas.execute("m", {"input_string": "x"}, validate=True, timeout=(1.0, 2.0))
+    assert captured["timeout"] == (1.0, 2.0)
+
+
+@responses.activate
+def test_execute_without_validate_makes_single_request() -> None:
+    # The default path stays a single POST — no signature round trip.
+    responses.add(responses.POST, _SIG_URL, json={"outputs": []})
+    make_client().mas.execute("m", {"anything": 1})
+    assert len(responses.calls) == 1
+    assert responses.calls[0].request.method == "POST"

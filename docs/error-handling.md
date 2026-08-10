@@ -9,6 +9,7 @@ subclass, so you can catch as broadly or precisely as you like.
 ```
 ViyaError                     # base — catch this to handle any library failure
 ├─ ViyaConfigError            # bad args (URL, token/auth, ids) — raised before any network call
+├─ ViyaValidationError        # inputs don't match a step signature — caught client-side
 ├─ ViyaConnectionError        # DNS/refused/TLS failure
 ├─ ViyaTimeoutError           # connect or read timeout exhausted
 ├─ ViyaAPIError               # any non-2xx; carries status/code/details/correlation id
@@ -47,8 +48,12 @@ you need them in the line.
 
 Local errors carry their own context instead:
 [`ViyaConfigError`][viyapy.ViyaConfigError] for invalid arguments (raised before
-any network call), and [`ViyaResponseError`][viyapy.ViyaResponseError] for a 2xx
-body that couldn't be parsed (it attaches the raw body).
+any network call), [`ViyaResponseError`][viyapy.ViyaResponseError] for a 2xx body
+that couldn't be parsed (it attaches the raw body), and
+[`ViyaValidationError`][viyapy.ViyaValidationError] when
+[`mas.validate`][viyapy.mas.MASClient.validate] (or `execute(..., validate=True)`)
+finds inputs that don't match the step signature — it lists the offending names on
+`exc.missing` and `exc.unexpected`, with `exc.module_id`/`exc.step` for context.
 
 ## Timeouts and retries
 
