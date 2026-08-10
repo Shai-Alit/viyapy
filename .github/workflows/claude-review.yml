@@ -58,12 +58,6 @@ jobs:
           # Turn on Foundry+OIDC. The action derives CLAUDE_CODE_USE_FOUNDRY from
           # this input; setting the env var directly is ignored.
           use_foundry: "true"
-          # TEMPORARY (diagnostic): the action hides the Claude Code SDK output by
-          # default ("full output hidden for security") and GitHub debug logging
-          # does NOT override it. The reviewer currently returns is_error:true after
-          # a flat ~180s timeout on the first model call with no visible reason;
-          # this surfaces the real Foundry error. Remove once the root cause is fixed.
-          show_full_output: "true"
           prompt: |
             REPO: ${{ github.repository }}
             PR NUMBER: ${{ github.event.pull_request.number }}
