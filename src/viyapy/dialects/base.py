@@ -21,6 +21,7 @@ from ..models import (
     ExecutionResult,
     MasModule,
     ModelStep,
+    ModuleSource,
     StepSignature,
     ValidationResult,
     Variable,
@@ -34,6 +35,11 @@ MAS_STEP_MEDIA_TYPE = "application/vnd.sas.microanalytic.module.step+json"
 MAS_STEP_INPUT_MEDIA_TYPE = "application/vnd.sas.microanalytic.module.step.input+json"
 # Accept/response type of the validations endpoint.
 MAS_VALIDATION_MEDIA_TYPE = "application/vnd.sas.validation+json"
+# Content-Type accepted by the module-creation endpoint (POST /modules). Note the
+# distinct `.definition+json` suffix — a plain `.module+json` create body 415s.
+MAS_MODULE_DEFINITION_MEDIA_TYPE = "application/vnd.sas.microanalytic.module.definition+json"
+# Accept/Content-Type of the module `/source` subresource (GET and PUT).
+MAS_MODULE_SOURCE_MEDIA_TYPE = "application/vnd.sas.microanalytic.module.source+json"
 
 
 def _coerce_int(value: Any) -> int | None:
@@ -71,6 +77,8 @@ class Dialect:
     name: str
     decision_media_type: str = "application/vnd.sas.decision+json"
     mas_module_media_type: str = MAS_MODULE_MEDIA_TYPE
+    mas_module_definition_media_type: str = MAS_MODULE_DEFINITION_MEDIA_TYPE
+    mas_module_source_media_type: str = MAS_MODULE_SOURCE_MEDIA_TYPE
     mas_step_media_type: str = MAS_STEP_MEDIA_TYPE
     mas_step_input_media_type: str = MAS_STEP_INPUT_MEDIA_TYPE
     mas_validation_media_type: str = MAS_VALIDATION_MEDIA_TYPE
@@ -89,6 +97,15 @@ class Dialect:
     def mas_module_path(self, module_id: str) -> str:
         """Return the relative path for a single MAS module's metadata."""
         return f"/microanalyticScore/modules/{quote(module_id, safe='')}"
+
+    def mas_module_source_path(self, module_id: str) -> str:
+        """Return the relative path for a MAS module's ``/source`` subresource.
+
+        A ``GET`` returns the module's source code, a ``PUT`` replaces it (which
+        requires an ``If-Match`` ETag). The id is percent-encoded for the same
+        reason as :meth:`mas_execute_path`.
+        """
+        return f"/microanalyticScore/modules/{quote(module_id, safe='')}/source"
 
     def mas_execute_path(self, module_id: str, step_id: str = DEFAULT_MAS_STEP) -> str:
         """Return the relative path for executing a MAS module step.
@@ -165,6 +182,45 @@ class Dialect:
             }
         return {"name": name, "value": value}
 
+    def build_module_definition(
+        self,
+        module_id: str,
+        source: str,
+        *,
+        source_type: str,
+        scope: str,
+        description: str | None = None,
+    ) -> dict[str, Any]:
+        """Build the request body for creating a MAS module (``POST /modules``).
+
+        ``source_type`` is the *source language* media type (e.g.
+        ``text/vnd.sas.source.ds2`` or ``text/x-python``), not the ``.module`` or
+        ``.definition+json`` envelope type. ``scope`` (e.g. ``"public"``) is
+        required by the server; ``description`` is omitted when ``None`` rather
+        than sent as ``null``.
+        """
+        body: dict[str, Any] = {
+            "id": module_id,
+            "type": source_type,
+            "scope": scope,
+            "source": source,
+        }
+        if description is not None:
+            body["description"] = description
+        return body
+
+    def build_source_update(
+        self, module_id: str, source: str, *, source_type: str
+    ) -> dict[str, Any]:
+        """Build the request body for a module source update (``PUT /source``).
+
+        ``source_type`` is the source-language media type (see
+        :meth:`build_module_definition`). The ``PUT`` additionally requires an
+        ``If-Match`` header carrying the current ETag; that is a transport
+        concern handled by the client, not part of this body.
+        """
+        return {"moduleId": module_id, "type": source_type, "source": source}
+
     # -- response parsing ---------------------------------------------------
 
     def parse_decision(self, decision_id: str, raw: Mapping[str, Any]) -> Decision:
@@ -220,6 +276,35 @@ class Dialect:
             modified_by=raw.get("modifiedBy"),
             creation_timestamp=raw.get("creationTimeStamp"),
             modified_timestamp=raw.get("modifiedTimeStamp"),
+            raw=dict(raw),
+        )
+
+    def parse_module_source(self, module_id: str, raw: Mapping[str, Any]) -> ModuleSource:
+        """Build a :class:`ModuleSource` from a MAS ``/source`` payload.
+
+        The module identity comes from the request (``module_id``); the payload's
+        own ``moduleId`` is preferred when present. The full payload is retained
+        on :attr:`ModuleSource.raw`.
+
+        Raises:
+            ViyaResponseError: The payload has no string ``source`` field — without
+                the source code the result would be meaningless, so a malformed
+                response fails loudly here.
+        """
+        source = raw.get("source")
+        if not isinstance(source, str):
+            raise ViyaResponseError(
+                "MAS module source payload has no usable 'source' field",
+                response_body=dict(raw),
+            )
+        return ModuleSource(
+            module_id=_prefer_str(raw.get("moduleId"), module_id),
+            source=source,
+            version=_coerce_int(raw.get("version")),
+            created_by=_str_or_none(raw.get("createdBy")),
+            modified_by=_str_or_none(raw.get("modifiedBy")),
+            creation_timestamp=_str_or_none(raw.get("creationTimeStamp")),
+            modified_timestamp=_str_or_none(raw.get("modifiedTimeStamp")),
             raw=dict(raw),
         )
 

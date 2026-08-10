@@ -85,6 +85,35 @@ class MasModule:
 
 
 @dataclass(frozen=True)
+class ModuleSource:
+    """The source code of a SAS Micro Analytic Score (MAS) module.
+
+    Returned by :meth:`~viyapy.mas.MASClient.get_source` and
+    :meth:`~viyapy.mas.MASClient.update_source`. Holds the module's raw source
+    text plus the metadata the ``/source`` subresource reports.
+
+    Attributes:
+        module_id: The owning module id.
+        source: The module's source code (DS2 or Python), verbatim.
+        version: The source resource version, if reported.
+        created_by: User who created the module, if reported.
+        modified_by: User who last modified the source, if reported.
+        creation_timestamp: Creation timestamp string, if reported.
+        modified_timestamp: Last-modified timestamp string, if reported.
+        raw: The originating source payload.
+    """
+
+    module_id: str
+    source: str
+    version: int | None = None
+    created_by: str | None = None
+    modified_by: str | None = None
+    creation_timestamp: str | None = None
+    modified_timestamp: str | None = None
+    raw: dict[str, Any] = field(default_factory=dict, repr=False)
+
+
+@dataclass(frozen=True)
 class Variable:
     """A single input or output variable in a MAS step signature.
 

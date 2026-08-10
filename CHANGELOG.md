@@ -9,6 +9,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- MAS module lifecycle management on `client.mas`: `create` compiles a module from
+  source (`language` `"ds2"`/`"python"`, `scope`, optional `description`) and
+  returns the resulting `MasModule`; `get_source` reads a module's source
+  subresource as the new typed `ModuleSource`; `update_source` replaces a module's
+  source in place; and `delete` removes a module. `update_source` honors MAS's
+  optimistic concurrency by first fetching the module to read its current `ETag`
+  and forwarding it verbatim as an `If-Match` header (the PUT returns `428
+  Precondition Required` without it); when `language` is omitted it reuses the
+  module's current language. Blank ids/source/scope and unsupported languages raise
+  `ViyaConfigError` before any request; a missing `ETag` or unresolvable language
+  raises `ViyaResponseError`. The create/source/update/delete wire shapes and the
+  ETag/`If-Match` requirement were confirmed against a live Viya 4 instance;
+  documented in both generation contracts and covered by unit and opt-in live
+  integration tests. `ModuleSource` is exported from the package root.
 - Binary (base64) MAS I/O and execution correlation metadata on
   `client.mas.execute`/`submit`. A `bytes`/`bytearray` input value is sent as
   base64 with `encoding: "b64"` (MAS accepts this for `binary`/`any`-typed

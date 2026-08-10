@@ -404,3 +404,39 @@ def test_request_json_on_non_json_2xx_raises_response_error() -> None:
     responses.add(responses.GET, f"{BASE}/x", body="<html>nope</html>", status=200)
     with pytest.raises(ViyaResponseError):
         make_client().request_json("GET", "/x")
+
+
+@responses.activate
+def test_request_json_on_json_array_raises_response_error() -> None:
+    # A JSON array is valid JSON but not the object the parsers expect.
+    responses.add(responses.GET, f"{BASE}/x", json=[1, 2, 3], status=200)
+    with pytest.raises(ViyaResponseError):
+        make_client().request_json("GET", "/x")
+
+
+# -- request_json_with_response / extra_headers -----------------------------
+
+
+@responses.activate
+def test_request_json_with_response_returns_body_and_response() -> None:
+    responses.add(responses.GET, f"{BASE}/x", json={"a": 1}, status=200, headers={"ETag": '"v7"'})
+    body, response = make_client().request_json_with_response("GET", "/x")
+    assert body == {"a": 1}
+    # The caller can read a response header (e.g. the ETag for If-Match) alongside
+    # the parsed body.
+    assert response.headers["ETag"] == '"v7"'
+
+
+@responses.activate
+def test_extra_headers_are_sent() -> None:
+    responses.add(responses.GET, f"{BASE}/x", json={}, status=200)
+    make_client().request("GET", "/x", extra_headers={"If-Match": '"v7"'})
+    assert responses.calls[0].request.headers["If-Match"] == '"v7"'
+
+
+@responses.activate
+def test_extra_headers_cannot_override_authorization() -> None:
+    # A caller-supplied Authorization header must never clobber the bearer token.
+    responses.add(responses.GET, f"{BASE}/x", json={}, status=200)
+    make_client().request("GET", "/x", extra_headers={"Authorization": "Bearer HACK"})
+    assert responses.calls[0].request.headers["Authorization"] == "Bearer secret-token"

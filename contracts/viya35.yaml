@@ -49,6 +49,43 @@ endpoints:
     # Fields the client reads off a single module payload.
     response_fields: [id, name, stepIds]
 
+  - id: create_mas_module
+    method: POST
+    path: /microanalyticScore/modules
+    # Create sends the definition body under a distinct `.definition+json`
+    # content type; a plain `.module+json` create body is rejected (415). `scope`
+    # is required by the server; `type` is the source-language media type
+    # (text/vnd.sas.source.ds2 or text/x-python), not the envelope type.
+    content_type: application/vnd.sas.microanalytic.module.definition+json
+    request_fields: [id, type, scope, source]
+    accept: application/vnd.sas.microanalytic.module+json
+    response_fields: [id]
+
+  - id: get_mas_module_source
+    method: GET
+    path: /microanalyticScore/modules/{module_id}/source
+    accept: application/vnd.sas.microanalytic.module.source+json
+    # Fields the client reads off the source subresource.
+    response_fields: [moduleId, source]
+
+  - id: update_mas_module_source
+    method: PUT
+    path: /microanalyticScore/modules/{module_id}/source
+    content_type: application/vnd.sas.microanalytic.module.source+json
+    request_fields: [moduleId, type, source]
+    accept: application/vnd.sas.microanalytic.module.source+json
+    # Optimistic concurrency: the PUT REQUIRES an `If-Match` header carrying the
+    # module's current ETag (returned by GET module or GET source); without it
+    # the server responds 428 Precondition Required.
+    required_headers: [If-Match]
+    response_fields: [moduleId, source]
+
+  - id: delete_mas_module
+    method: DELETE
+    path: /microanalyticScore/modules/{module_id}
+    # Returns 204 No Content (no response body).
+    response_fields: []
+
   - id: get_mas_module_step_signature
     method: GET
     path: /microanalyticScore/modules/{module_id}/steps/{step_id}

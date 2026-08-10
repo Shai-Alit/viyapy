@@ -1,0 +1,24 @@
+{
+  "moduleId": "api_tester1_0",
+  "source": "ds2_options sas;\npackage pkg / overwrite=yes;\n  method execute(double a, in_out double b);\n    b = a + 1;\n  end;\nendpackage;",
+  "createdBy": "sasdemo",
+  "creationTimeStamp": "2026-06-01T12:00:00.000Z",
+  "modifiedBy": "sasdemo",
+  "modifiedTimeStamp": "2026-06-02T09:30:00.000Z",
+  "links": [
+    {
+      "method": "GET",
+      "rel": "self",
+      "href": "/microanalyticScore/modules/api_tester1_0/source",
+      "type": "application/vnd.sas.microanalytic.module.source"
+    },
+    {
+      "method": "PUT",
+      "rel": "update",
+      "href": "/microanalyticScore/modules/api_tester1_0/source",
+      "type": "application/vnd.sas.microanalytic.module.source",
+      "responseType": "application/vnd.sas.microanalytic.module.source"
+    }
+  ],
+  "version": 2
+}
