@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Asynchronous MAS execution modes on `client.mas.execute`, surfacing SAS's
+  `waitTime` query parameter (milliseconds) as a new `wait_time` argument.
+  Omitting it (the default) runs synchronously and returns outputs; a positive
+  value runs *timed* — the call returns as soon as the run finishes, or early with
+  empty outputs and `executionState: timedOut` if it doesn't; `0` is
+  fire-and-forget, returning immediately with `executionState: submitted` and empty
+  outputs. `wait_time` must be a non-negative integer (bool, float, str, and
+  negatives raise `ViyaConfigError` before any request). Added a `client.mas.submit`
+  convenience for the fire-and-forget case (`wait_time=0`), and three
+  `ExecutionResult` helper properties — `completed`, `timed_out`, `submitted` — that
+  read the returned `execution_state`. Timed-out and submitted responses carry no
+  outputs by design, so the dialect parser now treats a missing output list as an
+  empty mapping for those states (a 2xx `completed` response with no output list
+  still raises `ViyaResponseError`). Documented the optional `waitTime` query param
+  in both generation contracts and covered by unit and opt-in live integration
+  tests. Note: MAS exposes no per-execution result-polling endpoint, so
+  fire-and-forget outputs are not retrievable later.
+
 ### Fixed
 
 - Removed the stale "pre-release / install from source" note from the README and

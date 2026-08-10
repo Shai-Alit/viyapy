@@ -21,6 +21,7 @@ Exit code is 0 when consistent, 1 when drift is found.
 
 from __future__ import annotations
 
+import inspect
 import json
 import sys
 from pathlib import Path
@@ -37,6 +38,12 @@ FIXTURES_DIR = REPO_ROOT / "tests" / "fixtures"
 sys.path.insert(0, str(REPO_ROOT / "src"))
 import viyapy.dialects as dialects  # noqa: E402  (path set up above)
 from viyapy.dialects.base import MODEL_STEP_TYPE  # noqa: E402
+from viyapy.mas import MASClient  # noqa: E402
+
+# Contract query-param names are the wire (camelCase) spelling; map each to the
+# MASClient.execute keyword that must exist for the code to actually send it, so
+# a declared query param can't drift away from its implementation unnoticed.
+QUERY_PARAM_TO_EXECUTE_KW = {"waitTime": "wait_time"}
 
 _ID = "__ID__"
 _MODULE = "__MODULE__"
@@ -138,6 +145,22 @@ def _check_generation(name: str, entry: dict[str, Any], problems: list[str]) -> 
                 f"{tag} primary outputs key: code {dialect.outputs_keys[0]!r} "
                 f"!= contract {mas['outputs_key']!r}"
             )
+
+        # Any query param the contract declares must be backed by a real
+        # MASClient.execute keyword, so the doc-only field can't silently lie.
+        execute_kwargs = inspect.signature(MASClient.execute).parameters
+        for param in mas.get("query_params", []):
+            kw = QUERY_PARAM_TO_EXECUTE_KW.get(param)
+            if kw is None:
+                problems.append(
+                    f"{tag} execute query param {param!r} is declared but the checker "
+                    f"has no mapping for it (add it to QUERY_PARAM_TO_EXECUTE_KW)"
+                )
+            elif kw not in execute_kwargs:
+                problems.append(
+                    f"{tag} execute query param {param!r} has no backing "
+                    f"MASClient.execute keyword {kw!r} — contract claim is unimplemented"
+                )
 
     # -- MAS module list/get endpoints: paths + media types -----------------
     modules = endpoints.get("list_mas_modules")

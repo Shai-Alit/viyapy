@@ -10,6 +10,14 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
+# MAS ``executionState`` values, returned in a step-execution ``stepOutput``.
+# Which one you get depends on the request's ``waitTime`` (see MASClient.execute):
+# a completed run reports ``completed``; a timed run that ran long reports
+# ``timedOut``; a fire-and-forget submit reports ``submitted``.
+EXECUTION_COMPLETED = "completed"
+EXECUTION_TIMED_OUT = "timedOut"
+EXECUTION_SUBMITTED = "submitted"
+
 
 @dataclass(frozen=True)
 class ModelStep:
@@ -147,9 +155,17 @@ class ValidationResult:
 class ExecutionResult:
     """The result of executing a MAS module step.
 
+    For a plain synchronous execute this holds the step's ``outputs``. For the
+    timed and fire-and-forget modes (see :meth:`viyapy.MASClient.execute` and
+    :meth:`~viyapy.MASClient.submit`), ``outputs`` may be empty and
+    ``execution_state`` distinguishes what happened — use the
+    :attr:`completed`, :attr:`timed_out`, and :attr:`submitted` helpers.
+
     Attributes:
-        outputs: Mapping of output name to value.
-        execution_state: MAS execution state (e.g. ``"completed"``), if present.
+        outputs: Mapping of output name to value (empty when timed out or
+            merely submitted).
+        execution_state: MAS execution state (``"completed"``, ``"timedOut"``,
+            or ``"submitted"``), if present.
         module_id: The executed module id, if reported.
         step_id: The executed step id, if reported.
         raw: The originating execution payload.
@@ -170,3 +186,28 @@ class ExecutionResult:
     def get(self, key: str, default: Any = None) -> Any:
         """Return output ``key``, or ``default`` if it is absent."""
         return self.outputs.get(key, default)
+
+    @property
+    def completed(self) -> bool:
+        """Whether the step finished; ``outputs`` are populated.
+
+        Keyed on an exact ``execution_state == "completed"`` match, so this
+        returns ``False`` when the server omits ``executionState`` entirely
+        (``execution_state is None``) even though ``outputs`` may be fully
+        populated. Check ``outputs`` directly if you need to handle a
+        deployment that doesn't report the state on a synchronous run.
+        """
+        return self.execution_state == EXECUTION_COMPLETED
+
+    @property
+    def timed_out(self) -> bool:
+        """Whether a timed execute exceeded its ``wait_time`` before finishing.
+
+        The run may still complete server-side; ``outputs`` is empty here.
+        """
+        return self.execution_state == EXECUTION_TIMED_OUT
+
+    @property
+    def submitted(self) -> bool:
+        """Whether a fire-and-forget execute was accepted without waiting."""
+        return self.execution_state == EXECUTION_SUBMITTED
