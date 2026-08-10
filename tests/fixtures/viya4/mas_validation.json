@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "valid": true,
+  "links": [
+    {
+      "method": "POST",
+      "rel": "self",
+      "href": "/microanalyticScore/commons/validations/modules/api_tester1_0/steps/execute",
+      "type": "application/vnd.sas.validation"
+    }
+  ]
+}

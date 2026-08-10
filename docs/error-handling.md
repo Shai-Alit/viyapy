@@ -50,10 +50,16 @@ Local errors carry their own context instead:
 [`ViyaConfigError`][viyapy.ViyaConfigError] for invalid arguments (raised before
 any network call), [`ViyaResponseError`][viyapy.ViyaResponseError] for a 2xx body
 that couldn't be parsed (it attaches the raw body), and
-[`ViyaValidationError`][viyapy.ViyaValidationError] when
-[`mas.validate`][viyapy.mas.MASClient.validate] (or `execute(..., validate=True)`)
-finds inputs that don't match the step signature — it lists the offending names on
-`exc.missing` and `exc.unexpected`, with `exc.module_id`/`exc.step` for context.
+[`ViyaValidationError`][viyapy.ViyaValidationError] when input validation fails.
+For the client-side check ([`mas.validate`][viyapy.mas.MASClient.validate] or
+`execute(..., validate=True)`) it lists the offending names on `exc.missing` and
+`exc.unexpected`. For the server-side check
+([`mas.validate_remote`][viyapy.mas.MASClient.validate_remote]) it carries the
+server's violation messages on `exc.messages` and the raw body on
+`exc.response_body` (name lists are empty there). Both set `exc.module_id`/
+`exc.step` for context. Note a server-side *invalid* result is an HTTP 201, not a
+4xx — `validate_remote` reads the verdict from the body and raises, unless you
+pass `raise_on_invalid=False` to inspect the returned `ValidationResult` yourself.
 
 ## Timeouts and retries
 

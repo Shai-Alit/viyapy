@@ -18,7 +18,7 @@ import os
 
 import pytest
 
-from viyapy import Decision, ExecutionResult, ViyaClient
+from viyapy import Decision, ExecutionResult, ValidationResult, ViyaClient
 
 pytestmark = pytest.mark.integration
 
@@ -53,6 +53,17 @@ def _check_mas(client: ViyaClient, module_id: str, inputs_json: str | None) -> N
     assert isinstance(result.outputs, dict)
 
 
+def _check_validate(client: ViyaClient, module_id: str, inputs_json: str | None) -> None:
+    inputs = json.loads(inputs_json) if inputs_json else {}
+    # Ask the server to validate the payload. Use raise_on_invalid=False so the
+    # test exercises the endpoint round trip and result shape regardless of
+    # whether the configured inputs happen to match the step's signature.
+    result = client.mas.validate_remote(module_id, inputs, raise_on_invalid=False)
+    assert isinstance(result, ValidationResult)
+    assert isinstance(result.valid, bool)
+    assert isinstance(result.messages, tuple)
+
+
 def _run(prefix: str, version: str, kind: str) -> None:
     env = _require(prefix)
     if kind == "decision":
@@ -60,10 +71,13 @@ def _run(prefix: str, version: str, kind: str) -> None:
             pytest.skip(f"{prefix}_DECISION not set")
         with ViyaClient(env["host"], env["token"], viya_version=version) as client:  # type: ignore[arg-type]
             _check_decision(client, env["decision"])
-    else:
-        if not env["module"]:
-            pytest.skip(f"{prefix}_MODULE not set")
-        with ViyaClient(env["host"], env["token"], viya_version=version) as client:  # type: ignore[arg-type]
+        return
+    if not env["module"]:
+        pytest.skip(f"{prefix}_MODULE not set")
+    with ViyaClient(env["host"], env["token"], viya_version=version) as client:  # type: ignore[arg-type]
+        if kind == "validate":
+            _check_validate(client, env["module"], env["inputs"])
+        else:
             _check_mas(client, env["module"], env["inputs"])
 
 
@@ -78,6 +92,10 @@ def test_viya4_mas_execute() -> None:
     _run("VIYAPY_TEST_4", "4", "mas")
 
 
+def test_viya4_mas_validate() -> None:
+    _run("VIYAPY_TEST_4", "4", "validate")
+
+
 # -- Viya 3.5 (scaffold — skipped until a 3.5 instance is available) --------
 
 
@@ -87,3 +105,7 @@ def test_viya35_decision_get() -> None:
 
 def test_viya35_mas_execute() -> None:
     _run("VIYAPY_TEST_35", "3.5", "mas")
+
+
+def test_viya35_mas_validate() -> None:
+    _run("VIYAPY_TEST_35", "3.5", "validate")

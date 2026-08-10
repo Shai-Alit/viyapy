@@ -13,12 +13,24 @@ from typing import Any
 from urllib.parse import quote
 
 from ..exceptions import ViyaResponseError
-from ..models import Decision, ExecutionResult, MasModule, ModelStep, StepSignature, Variable
+from ..models import (
+    Decision,
+    ExecutionResult,
+    MasModule,
+    ModelStep,
+    StepSignature,
+    ValidationResult,
+    Variable,
+)
 
 MODEL_STEP_TYPE = "application/vnd.sas.decision.step.model"
 DEFAULT_MAS_STEP = "execute"
 MAS_MODULE_MEDIA_TYPE = "application/vnd.sas.microanalytic.module+json"
 MAS_STEP_MEDIA_TYPE = "application/vnd.sas.microanalytic.module.step+json"
+# Request body sent to the validations endpoint (same shape as an execute body).
+MAS_STEP_INPUT_MEDIA_TYPE = "application/vnd.sas.microanalytic.module.step.input+json"
+# Accept/response type of the validations endpoint.
+MAS_VALIDATION_MEDIA_TYPE = "application/vnd.sas.validation+json"
 
 
 def _coerce_int(value: Any) -> int | None:
@@ -50,6 +62,8 @@ class Dialect:
     decision_media_type: str = "application/vnd.sas.decision+json"
     mas_module_media_type: str = MAS_MODULE_MEDIA_TYPE
     mas_step_media_type: str = MAS_STEP_MEDIA_TYPE
+    mas_step_input_media_type: str = MAS_STEP_INPUT_MEDIA_TYPE
+    mas_validation_media_type: str = MAS_VALIDATION_MEDIA_TYPE
     outputs_keys: tuple[str, ...] = ("outputs", "output")
 
     # -- endpoint paths -----------------------------------------------------
@@ -88,6 +102,18 @@ class Dialect:
         the same percent-encoding guarantees apply.
         """
         return self.mas_execute_path(module_id, step_id)
+
+    def mas_validation_path(self, module_id: str, step_id: str = DEFAULT_MAS_STEP) -> str:
+        """Return the relative path for validating a MAS step's inputs server-side.
+
+        A ``POST`` of a step-input body to this resource asks SAS Viya to validate
+        the payload against the step's signature. Both segments are percent-encoded
+        for the same reason as :meth:`mas_execute_path`.
+        """
+        return (
+            f"/microanalyticScore/commons/validations/modules/{quote(module_id, safe='')}"
+            f"/steps/{quote(step_id, safe='')}"
+        )
 
     # -- request building ---------------------------------------------------
 
@@ -241,6 +267,69 @@ class Dialect:
             f"MAS response contains no output list (expected one of {self.outputs_keys!r})",
             response_body=dict(raw),
         )
+
+    def parse_validation(
+        self, module_id: str, step_id: str, raw: Mapping[str, Any]
+    ) -> ValidationResult:
+        """Build a :class:`ValidationResult` from a MAS validations payload.
+
+        The endpoint returns ``valid`` (bool) and ``version``; an *invalid* payload
+        is still an HTTP 201 whose body carries ``valid: false`` and a SAS error
+        object, so the outcome is read from the body rather than the status. When
+        invalid, the error object's messages (its own ``message``/``details`` plus
+        any nested ``errors``) are flattened onto :attr:`ValidationResult.messages`.
+
+        Raises:
+            ViyaResponseError: The payload has no ``valid`` field — without it the
+                response isn't a usable validation result, so a malformed body
+                fails loudly here rather than being read as ``valid: false``.
+        """
+        if "valid" not in raw:
+            raise ViyaResponseError(
+                "MAS validation payload has no 'valid' field",
+                response_body=dict(raw),
+            )
+        valid = bool(raw.get("valid"))
+        error = raw.get("error")
+        error_dict = dict(error) if isinstance(error, Mapping) else None
+        messages = () if valid else self._validation_messages(error)
+        return ValidationResult(
+            valid=valid,
+            version=_coerce_int(raw.get("version")),
+            messages=messages,
+            error=error_dict,
+            module_id=module_id,
+            step=step_id,
+            raw=dict(raw),
+        )
+
+    def _validation_messages(self, error: Any) -> tuple[str, ...]:
+        """Flatten a SAS error object into ordered, de-duplicated message strings."""
+        messages: list[str] = []
+        self._collect_error_messages(error, messages)
+        # Preserve order while dropping duplicates (nested errors can repeat text).
+        seen: set[str] = set()
+        unique: list[str] = []
+        for message in messages:
+            if message not in seen:
+                seen.add(message)
+                unique.append(message)
+        return tuple(unique)
+
+    def _collect_error_messages(self, error: Any, acc: list[str]) -> None:
+        """Recursively gather ``message``/``details`` text from a SAS error object."""
+        if not isinstance(error, Mapping):
+            return
+        message = error.get("message")
+        if isinstance(message, str) and message.strip():
+            acc.append(message.strip())
+        details = error.get("details")
+        if isinstance(details, list):
+            acc.extend(d.strip() for d in details if isinstance(d, str) and d.strip())
+        nested = error.get("errors")
+        if isinstance(nested, list):
+            for item in nested:
+                self._collect_error_messages(item, acc)
 
     def __repr__(self) -> str:
         return f"{type(self).__name__}(name={self.name!r})"

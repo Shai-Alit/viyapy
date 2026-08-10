@@ -13,7 +13,8 @@ from ._validation import (
     require_positive_int,
 )
 from .dialects.base import DEFAULT_MAS_STEP, Dialect
-from .models import ExecutionResult, MasModule, StepSignature
+from .exceptions import ViyaValidationError
+from .models import ExecutionResult, MasModule, StepSignature, ValidationResult
 
 DEFAULT_PAGE_SIZE = 100
 
@@ -156,6 +157,74 @@ class MASClient:
         signature = self.get_signature(module_id, step=step, timeout=timeout)
         check_inputs_against_signature(signature, inputs, module_id=module_id, step=step)
         return signature
+
+    def validate_remote(
+        self,
+        module_id: str,
+        inputs: Mapping[str, Any],
+        *,
+        step: str = DEFAULT_MAS_STEP,
+        raise_on_invalid: bool = True,
+        timeout: float | tuple[float, float] | None = None,
+    ) -> ValidationResult:
+        """Validate ``inputs`` against a step server-side, without executing it.
+
+        Posts the inputs to the MAS validations endpoint so SAS Viya itself checks
+        them against the step's signature — a stronger check than the client-side
+        name comparison in :meth:`validate`, since the server also inspects types
+        and constraints. A single round trip, no signature fetch.
+
+        SAS reports an invalid payload as an HTTP 201 whose body says
+        ``valid: false`` (not as a 4xx). By default that is surfaced as a
+        :class:`~viyapy.exceptions.ViyaValidationError` carrying the server's
+        messages; pass ``raise_on_invalid=False`` to instead return the
+        :class:`~viyapy.models.ValidationResult` and inspect ``.valid`` yourself.
+
+        Args:
+            module_id: The module id.
+            inputs: Feature name/value mapping to validate.
+            step: The step to validate against (defaults to ``"execute"``).
+            raise_on_invalid: When ``True`` (default), raise ``ViyaValidationError``
+                if the server reports the inputs invalid. When ``False``, return the
+                result regardless so the caller can branch on ``.valid``.
+            timeout: Optional per-call timeout override.
+
+        Returns:
+            The parsed :class:`~viyapy.models.ValidationResult`.
+
+        Raises:
+            ViyaConfigError: ``module_id`` or ``step`` is empty or not a string.
+            ViyaNotFoundError: No such module or step exists.
+            ViyaResponseError: The response was not a usable validation result.
+            ViyaValidationError: ``raise_on_invalid`` is set and the server reports
+                the inputs invalid.
+            ViyaError: On any other failure.
+        """
+        module_id = require_identifier(module_id, "module_id")
+        step = require_identifier(step, "step")
+        raw = self._http.request_json(
+            "POST",
+            self._dialect.mas_validation_path(module_id, step),
+            accept=self._dialect.mas_validation_media_type,
+            content_type=self._dialect.mas_step_input_media_type,
+            json_body=self._dialect.build_inputs(inputs),
+            timeout=timeout,
+        )
+        result = self._dialect.parse_validation(module_id, step, raw)
+        if raise_on_invalid and not result.valid:
+            detail = (
+                "; ".join(result.messages)
+                if result.messages
+                else "the server did not accept the inputs"
+            )
+            raise ViyaValidationError(
+                f"MAS rejected the inputs for module {module_id!r} step {step!r}: {detail}",
+                messages=result.messages,
+                module_id=module_id,
+                step=step,
+                response_body=result.raw,
+            )
+        return result
 
     def execute(
         self,

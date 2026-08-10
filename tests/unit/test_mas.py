@@ -9,7 +9,7 @@ from typing import Any
 import pytest
 import responses
 
-from viyapy import StepSignature, Variable, ViyaClient
+from viyapy import StepSignature, ValidationResult, Variable, ViyaClient
 from viyapy.exceptions import (
     ViyaConfigError,
     ViyaNotFoundError,
@@ -538,3 +538,156 @@ def test_execute_without_validate_makes_single_request() -> None:
     make_client().mas.execute("m", {"anything": 1})
     assert len(responses.calls) == 1
     assert responses.calls[0].request.method == "POST"
+
+
+# -- validate_remote (server-side) -----------------------------------------
+
+
+_VAL_URL = f"{BASE}/microanalyticScore/commons/validations/modules/m/steps/execute"
+# A SAS error object as returned in the body of a 201 when the payload is invalid.
+_INVALID_BODY = {
+    "version": 1,
+    "valid": False,
+    "error": {
+        "message": "Validation failed.",
+        "details": ["input_string is required"],
+        "errors": [{"message": "input_string: missing required value"}],
+    },
+}
+
+
+@responses.activate
+@pytest.mark.parametrize("generation", ["viya4", "viya35"])
+def test_validate_remote_valid(
+    generation: str, load_fixture: Callable[[str, str], Any], version_for: Callable[[str], str]
+) -> None:
+    raw = load_fixture(generation, "mas_validation.json")
+    responses.add(responses.POST, _VAL_URL, json=raw, status=201)
+
+    result = make_client(version_for(generation)).mas.validate_remote("m", {"input_string": "hi"})
+
+    assert isinstance(result, ValidationResult)
+    assert result.valid is True
+    assert result.version == 1
+    assert result.messages == ()
+    assert result.module_id == "m"
+    assert result.step == "execute"
+    # One POST, to the validations endpoint, with the right media types and body.
+    assert len(responses.calls) == 1
+    request = responses.calls[0].request
+    assert request.method == "POST"
+    assert request.headers["Accept"] == "application/vnd.sas.validation+json"
+    assert (
+        request.headers["Content-Type"]
+        == "application/vnd.sas.microanalytic.module.step.input+json"
+    )
+    assert json.loads(request.body) == {"inputs": [{"name": "input_string", "value": "hi"}]}
+
+
+@responses.activate
+def test_validate_remote_invalid_raises_with_messages() -> None:
+    # SAS reports an invalid payload as a 201 with valid:false, not a 4xx.
+    responses.add(responses.POST, _VAL_URL, json=_INVALID_BODY, status=201)
+    with pytest.raises(ViyaValidationError) as excinfo:
+        make_client().mas.validate_remote("m", {"wrong": 1})
+    err = excinfo.value
+    # Server messages are flattened (top-level, details, and nested errors).
+    assert "Validation failed." in err.messages
+    assert "input_string is required" in err.messages
+    assert "input_string: missing required value" in err.messages
+    assert err.module_id == "m"
+    assert err.step == "execute"
+    assert err.response_body == _INVALID_BODY
+    # Client-side name partition is empty for a server-side failure.
+    assert err.missing == ()
+    assert err.unexpected == ()
+    assert "MAS rejected the inputs" in str(err)
+
+
+@responses.activate
+def test_validate_remote_invalid_without_raise_returns_result() -> None:
+    responses.add(responses.POST, _VAL_URL, json=_INVALID_BODY, status=201)
+    result = make_client().mas.validate_remote("m", {"wrong": 1}, raise_on_invalid=False)
+    assert result.valid is False
+    assert "Validation failed." in result.messages
+    assert result.error == _INVALID_BODY["error"]
+
+
+@responses.activate
+def test_validate_remote_invalid_without_error_object() -> None:
+    # A bare valid:false (no error object) still raises, with a default message.
+    responses.add(responses.POST, _VAL_URL, json={"version": 1, "valid": False}, status=201)
+    with pytest.raises(ViyaValidationError) as excinfo:
+        make_client().mas.validate_remote("m", {"x": 1})
+    assert excinfo.value.messages == ()
+    assert "did not accept the inputs" in str(excinfo.value)
+
+
+@responses.activate
+@pytest.mark.parametrize("bad", ["", "   "])
+def test_validate_remote_blank_module_id_fails_fast(bad: str) -> None:
+    with pytest.raises(ViyaConfigError):
+        make_client().mas.validate_remote(bad, {"a": 1})
+    assert len(responses.calls) == 0
+
+
+@responses.activate
+def test_validate_remote_blank_step_fails_fast() -> None:
+    with pytest.raises(ViyaConfigError):
+        make_client().mas.validate_remote("m", {"a": 1}, step="  ")
+    assert len(responses.calls) == 0
+
+
+@responses.activate
+def test_validate_remote_missing_step_raises_not_found() -> None:
+    url = f"{BASE}/microanalyticScore/commons/validations/modules/m/steps/gone"
+    responses.add(responses.POST, url, json={"message": "no"}, status=404)
+    with pytest.raises(ViyaNotFoundError):
+        make_client().mas.validate_remote("m", {"a": 1}, step="gone")
+
+
+@responses.activate
+def test_validate_remote_malformed_payload_raises_response_error() -> None:
+    # A 2xx body with no `valid` field isn't a usable validation result.
+    responses.add(responses.POST, _VAL_URL, json={"version": 1}, status=201)
+    with pytest.raises(ViyaResponseError):
+        make_client().mas.validate_remote("m", {"a": 1})
+
+
+@responses.activate
+def test_validate_remote_dedups_and_tolerates_non_mapping_error() -> None:
+    # Duplicate messages across the envelope and nested errors collapse to one,
+    # and a non-mapping `error` degrades to no messages / no error object.
+    body_dupe = {
+        "valid": False,
+        "error": {
+            "message": "same",
+            "errors": [
+                {"message": "same"},  # duplicate of the top-level message
+                {"details": ["from details"]},  # a nested error with no `message`
+                {"message": "other"},
+            ],
+        },
+    }
+    responses.add(responses.POST, _VAL_URL, json=body_dupe, status=201)
+    result = make_client().mas.validate_remote("m", {"x": 1}, raise_on_invalid=False)
+    # Deduped, order preserved; a message-less nested error contributes its details.
+    assert result.messages == ("same", "from details", "other")
+
+    responses.reset()
+    responses.add(responses.POST, _VAL_URL, json={"valid": False, "error": "boom"}, status=201)
+    result = make_client().mas.validate_remote("m", {"x": 1}, raise_on_invalid=False)
+    assert result.messages == ()
+    assert result.error is None
+
+
+@responses.activate
+def test_validate_remote_percent_encodes_path_segments() -> None:
+    responses.add(
+        responses.POST,
+        f"{BASE}/microanalyticScore/commons/validations/modules/a%2Fb/steps/c%3Fd",
+        json={"version": 1, "valid": True},
+        status=201,
+    )
+    make_client().mas.validate_remote("a/b", {}, step="c?d")
+    assert "/validations/modules/a%2Fb/steps/c%3Fd" in responses.calls[0].request.url

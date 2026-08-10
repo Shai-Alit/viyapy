@@ -46,3 +46,13 @@ endpoints:
     accept: application/vnd.sas.microanalytic.module.step+json
     # A step's input/output signature; each list entry is a name/type/dim/size.
     response_fields: [id, moduleId, inputs, outputs]
+
+  - id: validate_mas_module_step_inputs
+    method: POST
+    path: /microanalyticScore/commons/validations/modules/{module_id}/steps/{step_id}
+    # Same body as an execute request (an inputs list).
+    request_fields: [inputs]
+    accept: application/vnd.sas.validation+json
+    # HTTP 201; an invalid payload is reported in-body as `valid: false` with a
+    # SAS error object rather than a 4xx. Fields the client reads off the result.
+    response_fields: [version, valid]
