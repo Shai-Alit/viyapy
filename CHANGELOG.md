@@ -9,6 +9,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Server-side MAS input validation: `client.mas.validate_remote(module_id, inputs,
+  step="execute")` POSTs the inputs to SAS Viya's validations endpoint and returns
+  the new typed `ValidationResult` (exported from the package root: `valid`,
+  `version`, `messages`, `error`, `raw`). Unlike the client-side name check, the
+  server also inspects types and constraints. SAS reports an invalid payload as an
+  HTTP 201 with `valid: false` and an error object (not a 4xx); by default that is
+  raised as `ViyaValidationError` with the server's messages on `.messages` and the
+  raw body on `.response_body` — pass `raise_on_invalid=False` to get the result
+  and branch on `.valid` yourself. Declared as the `validate_mas_module_step_inputs`
+  endpoint (a required drift-gate endpoint) in both generation contracts with
+  `mas_validation.json` fixtures, and covered by opt-in live integration tests.
 - Client-side MAS input validation: `client.mas.validate(module_id, inputs,
   step="execute")` fetches the step signature and checks the supplied input names
   against it, raising the new `ViyaValidationError` (exported from the package

@@ -114,6 +114,36 @@ class StepSignature:
 
 
 @dataclass(frozen=True)
+class ValidationResult:
+    """The result of validating MAS step inputs server-side.
+
+    Returned by :meth:`~viyapy.mas.MASClient.validate_remote`, which asks SAS Viya
+    itself to validate a payload against a step's signature (as opposed to the
+    client-side name check in :meth:`~viyapy.mas.MASClient.validate`). An invalid
+    payload is reported as ``valid=False`` with the server's violation messages,
+    not as an HTTP error.
+
+    Attributes:
+        valid: Whether the server accepted the inputs against the step signature.
+        version: The validation resource version, if reported.
+        messages: Human-readable violation messages when invalid (empty when
+            valid), flattened from the server's error envelope.
+        error: The raw SAS error object returned when invalid, if present.
+        module_id: The module whose step was validated, if known.
+        step: The step that was validated, if known.
+        raw: The originating validation payload.
+    """
+
+    valid: bool
+    version: int | None = None
+    messages: tuple[str, ...] = ()
+    error: dict[str, Any] | None = None
+    module_id: str | None = None
+    step: str | None = None
+    raw: dict[str, Any] = field(default_factory=dict, repr=False)
+
+
+@dataclass(frozen=True)
 class ExecutionResult:
     """The result of executing a MAS module step.
 

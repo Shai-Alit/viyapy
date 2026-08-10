@@ -119,20 +119,34 @@ class ViyaResponseError(ViyaError):
 
 
 class ViyaValidationError(ViyaError):
-    """Inputs did not match a MAS step signature, caught client-side before executing.
+    """Inputs did not match a MAS step signature.
 
-    Raised by client-side validation (:meth:`~viyapy.mas.MASClient.validate` or
-    :meth:`~viyapy.mas.MASClient.execute` with ``validate=True``) when the supplied
-    inputs do not match the step's declared signature — a declared input is missing,
-    or an undeclared input was supplied. SAS Viya rejects a mismatched signature
-    regardless, but the failure otherwise surfaces deep in the execution chain;
-    raising locally fails fast and names the offending input directly.
+    Raised in two situations:
+
+    * **Client-side** — :meth:`~viyapy.mas.MASClient.validate` or
+      :meth:`~viyapy.mas.MASClient.execute` with ``validate=True`` compares the
+      supplied input *names* to the step's declared signature and raises when a
+      declared input is missing or an undeclared one was supplied. The offending
+      names are on :attr:`missing`/:attr:`unexpected`. SAS rejects a mismatched
+      signature regardless, but the failure otherwise surfaces deep in the
+      execution chain; raising locally fails fast and names the input directly.
+    * **Server-side** — :meth:`~viyapy.mas.MASClient.validate_remote` asks SAS
+      Viya to validate the payload and raises when the server reports it invalid
+      (unless ``raise_on_invalid=False``). The server's violation messages are on
+      :attr:`messages` and the raw validation body on :attr:`response_body`;
+      :attr:`missing`/:attr:`unexpected` are empty because the server reports
+      free-form messages rather than a name partition.
 
     Attributes:
-        missing: Declared input names that were not supplied (sorted).
+        missing: Declared input names that were not supplied (sorted). Client-side
+            check only; empty for a server-side failure.
         unexpected: Supplied input names the signature does not declare (sorted).
+            Client-side check only; empty for a server-side failure.
+        messages: Server-reported violation messages. Server-side check only;
+            empty for a client-side failure.
         module_id: The module whose signature was checked, if known.
         step: The step whose signature was checked, if known.
+        response_body: The raw server validation body, for a server-side failure.
     """
 
     def __init__(
@@ -141,15 +155,19 @@ class ViyaValidationError(ViyaError):
         *,
         missing: tuple[str, ...] = (),
         unexpected: tuple[str, ...] = (),
+        messages: tuple[str, ...] = (),
         module_id: str | None = None,
         step: str | None = None,
+        response_body: Any = None,
     ) -> None:
         super().__init__(message)
         self.message = message
         self.missing = missing
         self.unexpected = unexpected
+        self.messages = messages
         self.module_id = module_id
         self.step = step
+        self.response_body = response_body
 
 
 class ViyaSecurityWarning(UserWarning):

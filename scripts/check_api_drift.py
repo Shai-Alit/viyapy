@@ -50,6 +50,7 @@ REQUIRED_ENDPOINTS = (
     "list_mas_modules",
     "get_mas_module",
     "get_mas_module_step_signature",
+    "validate_mas_module_step_inputs",
 )
 
 
@@ -171,6 +172,28 @@ def _check_generation(name: str, entry: dict[str, Any], problems: list[str]) -> 
                 f"!= contract {step['accept']!r}"
             )
 
+    # -- MAS validation endpoint: path, request body, media type ------------
+    val = endpoints.get("validate_mas_module_step_inputs")
+    if val:
+        expected = val["path"].replace("{module_id}", _MODULE).replace("{step_id}", _STEP)
+        actual = dialect.mas_validation_path(_MODULE, _STEP)
+        if actual != expected:
+            problems.append(f"{tag} mas_validation_path: code {actual!r} != contract {expected!r}")
+
+        # The validations endpoint reuses the execute request body (an inputs list).
+        built = list(dialect.build_inputs({"a": 1}).keys())
+        if built != val["request_fields"]:
+            problems.append(
+                f"{tag} validation request body keys: code {built} "
+                f"!= contract {val['request_fields']}"
+            )
+
+        if dialect.mas_validation_media_type != val["accept"]:
+            problems.append(
+                f"{tag} validation Accept: code {dialect.mas_validation_media_type!r} "
+                f"!= contract {val['accept']!r}"
+            )
+
     _check_fixtures(name, contract, dialect, endpoints, problems)
 
 
@@ -259,6 +282,24 @@ def _check_fixtures(
                 problems.append(
                     f"{tag} {step_file.name}: parser produced no input/output variables"
                 )
+
+    val_ep = endpoints.get("validate_mas_module_step_inputs")
+    val_file = fixtures / "mas_validation.json"
+    if val_ep:
+        if not val_file.exists():
+            problems.append(f"{tag} missing fixture {val_file.relative_to(REPO_ROOT)}")
+        else:
+            raw = _load_json(val_file)
+            for field in val_ep.get("response_fields", []):
+                if not _has_path(raw, field):
+                    problems.append(
+                        f"{tag} fixture {val_file.name} missing response field {field!r}"
+                    )
+            result = dialect.parse_validation(_MODULE, _STEP, raw)
+            # The captured fixture is a valid (accepted) response, so the parser
+            # must round-trip it to valid=True — a drifted shape would flip this.
+            if not result.valid:
+                problems.append(f"{tag} {val_file.name}: parser read the OK fixture as invalid")
 
     dec_ep = endpoints.get("get_decision_content")
     dec_file = fixtures / "decision_content.json"

@@ -20,11 +20,25 @@ Per generation (`VIYAPY_TEST_4_*` for Viya 4, `VIYAPY_TEST_35_*` for Viya 3.5):
 | `<PREFIX>_HOST` | yes | Base URL, e.g. `https://viya.example.com` |
 | `<PREFIX>_TOKEN` | yes | OAuth2 bearer token |
 | `<PREFIX>_DECISION` | for the decision test | A decision id to `GET` |
-| `<PREFIX>_MODULE` | for the MAS test | A published module id to execute |
+| `<PREFIX>_MODULE` | for the MAS execute + validate tests | A published module id |
 | `<PREFIX>_INPUTS` | optional | JSON object of MAS inputs (default `{}`) |
 
 If `HOST`/`TOKEN` are unset the whole generation is skipped; if only
-`DECISION`/`MODULE` are unset, just that test is skipped.
+`DECISION`/`MODULE` are unset, just the test needing it is skipped.
+
+## What each test does
+
+Per generation there are three tests, all driven by the variables above:
+
+- **decision** (`<PREFIX>_DECISION`) — `GET`s a decision flow and checks it parses.
+- **mas execute** (`<PREFIX>_MODULE`, `<PREFIX>_INPUTS`) — executes the module
+  step and checks the outputs parse.
+- **mas validate** (`<PREFIX>_MODULE`, `<PREFIX>_INPUTS`) — POSTs the inputs to the
+  server-side validations endpoint (`client.mas.validate_remote(...)`). It runs
+  with `raise_on_invalid=False`, so it passes whether or not your inputs match the
+  step signature — it only asserts the endpoint returns a structured
+  `ValidationResult`. Inspect `result.valid` and `result.messages` to see the
+  server's verdict for your inputs.
 
 ## Running against Viya 4
 

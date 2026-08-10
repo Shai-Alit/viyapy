@@ -45,6 +45,7 @@ def test_model_names_are_exported() -> None:
         "ExecutionResult",
         "MasModule",
         "StepSignature",
+        "ValidationResult",
         "Variable",
     ]:
         assert name in viyapy.__all__

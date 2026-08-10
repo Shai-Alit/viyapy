@@ -82,6 +82,38 @@ signature), pass `validate=True` to [`execute`](#execute-a-module):
 result = client.mas.execute("api_tester1_0", inputs, validate=True)
 ```
 
+### Server-side validation
+
+`validate` compares *names* locally. To have SAS Viya itself validate the payload
+— including types and constraints — use
+[`validate_remote`][viyapy.mas.MASClient.validate_remote], which POSTs the inputs
+to the MAS validations endpoint and returns a typed
+[`ValidationResult`][viyapy.ValidationResult]:
+
+```python
+result = client.mas.validate_remote("api_tester1_0", {"input_string": "hi"})
+result.valid       # True — the server accepted the inputs
+result.version     # the validation resource version, if reported
+```
+
+SAS reports an invalid payload as an HTTP 201 whose body says `valid: false` (not
+as a 4xx error). By default `validate_remote` surfaces that as a
+[`ViyaValidationError`][viyapy.ViyaValidationError] carrying the server's messages
+on `.messages`. Pass `raise_on_invalid=False` to inspect the result yourself
+instead:
+
+```python
+result = client.mas.validate_remote("api_tester1_0", inputs, raise_on_invalid=False)
+if not result.valid:
+    for message in result.messages:   # the server's violation messages
+        print(message)
+    result.error                      # the raw SAS error object, if present
+```
+
+Choose `validate` for a cheap, offline-ish name check (one signature fetch) and
+`validate_remote` when you want the server's authoritative verdict (one POST, no
+execution).
+
 ## Execute a module
 
 [`execute`][viyapy.mas.MASClient.execute] posts a feature mapping to a module's
