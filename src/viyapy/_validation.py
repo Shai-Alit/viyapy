@@ -56,6 +56,29 @@ def optional_identifier(value: object, name: str) -> str | None:
     return require_identifier(value, name)
 
 
+def require_non_empty_str(value: object, name: str) -> str:
+    """Return ``value`` unchanged if it is a non-empty string, else raise.
+
+    Unlike :func:`require_identifier`, this does *not* strip the value — it is for
+    content where surrounding whitespace may be significant (e.g. a module's
+    source code). A string that is empty or only whitespace is still rejected,
+    since it cannot be meaningful source.
+
+    Args:
+        value: The candidate string (e.g. module source code).
+        name: Parameter name, used in the error message.
+
+    Returns:
+        The original string, unmodified.
+
+    Raises:
+        ViyaConfigError: ``value`` is not a string, or is empty/whitespace-only.
+    """
+    if not isinstance(value, str) or not value.strip():
+        raise ViyaConfigError(f"{name} must be a non-empty string")
+    return value
+
+
 def require_positive_int(value: object, name: str) -> int:
     """Return ``value`` if it is a positive integer, else raise.
 

@@ -194,6 +194,7 @@ class HttpClient:
         json_body: Any = None,
         params: Mapping[str, Any] | None = None,
         timeout: float | tuple[float, float] | None = None,
+        extra_headers: Mapping[str, str] | None = None,
     ) -> requests.Response:
         """Issue an authenticated request and return the raw response.
 
@@ -206,6 +207,9 @@ class HttpClient:
             params: Query-string parameters.
             timeout: Per-call override of the client timeout; ``None`` uses the
                 client default.
+            extra_headers: Additional request headers (e.g. ``If-Match`` for
+                optimistic concurrency). Merged over the base headers, but the
+                ``Authorization`` header can never be overridden.
 
         Returns:
             The successful :class:`requests.Response` (2xx).
@@ -231,6 +235,12 @@ class HttpClient:
         }
         if json_body is not None and content_type:
             headers["Content-Type"] = content_type
+        if extra_headers:
+            # Never let a caller-supplied header clobber the bearer token.
+            for key, value in extra_headers.items():
+                if key.lower() == "authorization":
+                    continue
+                headers[key] = value
         effective_timeout = self.timeout if timeout is None else timeout
 
         logger.debug("Viya request: %s %s", method, url)
@@ -270,7 +280,27 @@ class HttpClient:
                 scalar), which downstream parsers cannot consume.
             (plus everything :meth:`request` raises)
         """
+        return self.request_json_with_response(method, path, **kwargs)[0]
+
+    def request_json_with_response(
+        self, method: str, path: str, **kwargs: Any
+    ) -> tuple[dict[str, Any], requests.Response]:
+        """Like :meth:`request_json`, but also return the raw response.
+
+        Use this when a caller needs a response header alongside the parsed body
+        — notably the ``ETag`` used for optimistic-concurrency ``If-Match`` on a
+        MAS source update.
+
+        Raises:
+            ViyaResponseError: The response was 2xx but its body was not a JSON
+                object (see :meth:`request_json`).
+            (plus everything :meth:`request` raises)
+        """
         response = self.request(method, path, **kwargs)
+        return self._parse_json_object(response), response
+
+    @staticmethod
+    def _parse_json_object(response: requests.Response) -> dict[str, Any]:
         try:
             parsed = response.json()
         except ValueError as exc:

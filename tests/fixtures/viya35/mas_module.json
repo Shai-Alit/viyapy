@@ -4,6 +4,7 @@
   "description": "Published decision exposed as a MAS module",
   "revision": 0,
   "scope": "public",
+  "language": "ds2",
   "stepIds": ["execute"],
   "createdBy": "sasdemo",
   "modifiedBy": "sasdemo",

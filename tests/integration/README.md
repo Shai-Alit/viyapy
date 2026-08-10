@@ -20,15 +20,18 @@ Per generation (`VIYAPY_TEST_4_*` for Viya 4, `VIYAPY_TEST_35_*` for Viya 3.5):
 | `<PREFIX>_HOST` | yes | Base URL, e.g. `https://viya.example.com` |
 | `<PREFIX>_TOKEN` | yes | OAuth2 bearer token |
 | `<PREFIX>_DECISION` | for the decision test | A decision id to `GET` |
-| `<PREFIX>_MODULE` | for the MAS execute + validate tests | A published module id |
+| `<PREFIX>_MODULE` | for the MAS execute/validate/submit/metadata tests | A published module id |
 | `<PREFIX>_INPUTS` | optional | JSON object of MAS inputs (default `{}`) |
+| `<PREFIX>_ALLOW_CRUD` | for the MAS CRUD lifecycle test | Set to any value to opt in to the module-mutating create/update/delete test |
 
 If `HOST`/`TOKEN` are unset the whole generation is skipped; if only
-`DECISION`/`MODULE` are unset, just the test needing it is skipped.
+`DECISION`/`MODULE` are unset, just the test needing it is skipped. The CRUD
+lifecycle test additionally skips unless `<PREFIX>_ALLOW_CRUD` is set, since it
+creates and deletes a module on the deployment.
 
 ## What each test does
 
-Per generation there are four tests, all driven by the variables above:
+Per generation there are several tests, all driven by the variables above:
 
 - **decision** (`<PREFIX>_DECISION`) — `GET`s a decision flow and checks it parses.
 - **mas execute** (`<PREFIX>_MODULE`, `<PREFIX>_INPUTS`) — executes the module
@@ -42,6 +45,14 @@ Per generation there are four tests, all driven by the variables above:
 - **mas submit** (`<PREFIX>_MODULE`, `<PREFIX>_INPUTS`) — fire-and-forget execution
   (`client.mas.submit(...)`, i.e. `wait_time=0`). Asserts the server returns an
   `ExecutionResult` with `submitted` set and empty outputs.
+- **mas metadata** (`<PREFIX>_MODULE`, `<PREFIX>_INPUTS`) — executes with
+  `client_id`/`transaction_id` and asserts the server echoes both back on the
+  `ExecutionResult`.
+- **mas crud** (`<PREFIX>_ALLOW_CRUD`) — full module lifecycle: creates a small
+  throwaway DS2 module, reads its source, updates the source (exercising the
+  `ETag`/`If-Match` round trip), then deletes it. Self-contained (no
+  `<PREFIX>_MODULE` needed) and self-cleaning, but gated behind `ALLOW_CRUD`
+  because it mutates the deployment.
 
 ## Running against Viya 4
 

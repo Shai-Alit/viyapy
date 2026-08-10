@@ -56,9 +56,16 @@ REQUIRED_ENDPOINTS = (
     "execute_mas_step",
     "list_mas_modules",
     "get_mas_module",
+    "create_mas_module",
+    "get_mas_module_source",
+    "update_mas_module_source",
+    "delete_mas_module",
     "get_mas_module_step_signature",
     "validate_mas_module_step_inputs",
 )
+
+# A source-language media type used to exercise the request-body builders below.
+_SOURCE_TYPE = "text/vnd.sas.source.ds2"
 
 
 def _load_yaml(path: Path) -> dict[str, Any]:
@@ -182,6 +189,100 @@ def _check_generation(name: str, entry: dict[str, Any], problems: list[str]) -> 
                 f"!= contract {module['accept']!r}"
             )
 
+    # -- MAS module create: path, content type, body, accept ----------------
+    create = endpoints.get("create_mas_module")
+    if create:
+        if dialect.mas_modules_path() != create["path"]:
+            problems.append(
+                f"{tag} create path: code {dialect.mas_modules_path()!r} "
+                f"!= contract {create['path']!r}"
+            )
+        if dialect.mas_module_definition_media_type != create["content_type"]:
+            problems.append(
+                f"{tag} create Content-Type: code {dialect.mas_module_definition_media_type!r} "
+                f"!= contract {create['content_type']!r}"
+            )
+        if dialect.mas_module_media_type != create["accept"]:
+            problems.append(
+                f"{tag} create Accept: code {dialect.mas_module_media_type!r} "
+                f"!= contract {create['accept']!r}"
+            )
+        built = list(
+            dialect.build_module_definition(
+                _MODULE, "src", source_type=_SOURCE_TYPE, scope="public"
+            ).keys()
+        )
+        if built != create["request_fields"]:
+            problems.append(
+                f"{tag} create request body keys: code {built} "
+                f"!= contract {create['request_fields']}"
+            )
+        if not hasattr(MASClient, "create"):
+            problems.append(
+                f"{tag} contract declares create_mas_module but MASClient.create is missing"
+            )
+
+    # -- MAS module source get/update: path, media types, body --------------
+    src_get = endpoints.get("get_mas_module_source")
+    if src_get:
+        expected = src_get["path"].replace("{module_id}", _MODULE)
+        actual = dialect.mas_module_source_path(_MODULE)
+        if actual != expected:
+            problems.append(
+                f"{tag} mas_module_source_path: code {actual!r} != contract {expected!r}"
+            )
+        if dialect.mas_module_source_media_type != src_get["accept"]:
+            problems.append(
+                f"{tag} source Accept: code {dialect.mas_module_source_media_type!r} "
+                f"!= contract {src_get['accept']!r}"
+            )
+        if not hasattr(MASClient, "get_source"):
+            problems.append(
+                f"{tag} contract declares get_mas_module_source but MASClient.get_source is missing"
+            )
+
+    src_put = endpoints.get("update_mas_module_source")
+    if src_put:
+        expected = src_put["path"].replace("{module_id}", _MODULE)
+        actual = dialect.mas_module_source_path(_MODULE)
+        if actual != expected:
+            problems.append(f"{tag} update source path: code {actual!r} != contract {expected!r}")
+        if dialect.mas_module_source_media_type != src_put["content_type"]:
+            problems.append(
+                f"{tag} update source Content-Type: code {dialect.mas_module_source_media_type!r} "
+                f"!= contract {src_put['content_type']!r}"
+            )
+        built = list(dialect.build_source_update(_MODULE, "src", source_type=_SOURCE_TYPE).keys())
+        if built != src_put["request_fields"]:
+            problems.append(
+                f"{tag} update source body keys: code {built} "
+                f"!= contract {src_put['request_fields']}"
+            )
+        # The If-Match precondition is load-bearing; the contract must declare it
+        # so a future refactor that drops the header is a reviewable change.
+        if "If-Match" not in src_put.get("required_headers", []):
+            problems.append(
+                f"{tag} update_mas_module_source must declare If-Match in required_headers "
+                "(MAS returns 428 without it)"
+            )
+        if not hasattr(MASClient, "update_source"):
+            problems.append(
+                f"{tag} contract declares update_mas_module_source but "
+                "MASClient.update_source is missing"
+            )
+
+    # -- MAS module delete: path --------------------------------------------
+    delete = endpoints.get("delete_mas_module")
+    if delete:
+        expected = delete["path"].replace("{module_id}", _MODULE)
+        actual = dialect.mas_module_path(_MODULE)
+        if actual != expected:
+            problems.append(f"{tag} delete path: code {actual!r} != contract {expected!r}")
+        if not hasattr(MASClient, "delete"):
+            problems.append(
+                f"{tag} contract declares delete_mas_module but MASClient.delete is missing"
+            )
+
     # -- MAS step signature endpoint: path + media type ---------------------
     step = endpoints.get("get_mas_module_step_signature")
     if step:
@@ -287,6 +388,22 @@ def _check_fixtures(
                     )
             if not dialect.parse_module(raw).id:
                 problems.append(f"{tag} {module_file.name}: module parsed with no id")
+
+    src_ep = endpoints.get("get_mas_module_source")
+    src_file = fixtures / "mas_module_source.json"
+    if src_ep:
+        if not src_file.exists():
+            problems.append(f"{tag} missing fixture {src_file.relative_to(REPO_ROOT)}")
+        else:
+            raw = _load_json(src_file)
+            for field in src_ep.get("response_fields", []):
+                if not _has_path(raw, field):
+                    problems.append(
+                        f"{tag} fixture {src_file.name} missing response field {field!r}"
+                    )
+            parsed = dialect.parse_module_source(_MODULE, raw)
+            if not parsed.source:
+                problems.append(f"{tag} {src_file.name}: parser produced no source text")
 
     step_ep = endpoints.get("get_mas_module_step_signature")
     step_file = fixtures / "mas_step_signature.json"

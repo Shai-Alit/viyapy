@@ -34,6 +34,83 @@ module.raw               # the raw module payload
 id, and both methods raise [`ViyaConfigError`][viyapy.ViyaConfigError] for an
 invalid `module_id` or `page_size` before any request is issued.
 
+## Managing modules
+
+Beyond reading modules, `client.mas` can create, update, and delete them, and read
+back a module's source.
+
+### Create a module
+
+[`create`][viyapy.mas.MASClient.create] compiles a module from source and returns
+the resulting [`MasModule`][viyapy.MasModule]:
+
+```python
+module = client.mas.create(
+    "scorer_1_0",
+    ds2_source,               # the module source text
+    language="ds2",           # "ds2" (default) or "python"
+    scope="public",           # "public" (default) or "private"
+    description="Scoring module",   # optional
+)
+module.id                     # "scorer_1_0"
+module.step_ids               # the steps the compiled module exposes
+```
+
+`language` selects the source media type (`text/vnd.sas.source.ds2` or
+`text/x-python`) and is matched case-insensitively. `module_id`, `source`, and
+`scope` must be non-empty; an unsupported `language` or any blank argument raises
+[`ViyaConfigError`][viyapy.ViyaConfigError] before a request is issued. A source
+that fails to compile surfaces the server's error as a
+[`ViyaAPIError`][viyapy.ViyaAPIError].
+
+### Read a module's source
+
+[`get_source`][viyapy.mas.MASClient.get_source] fetches the source subresource as
+a typed [`ModuleSource`][viyapy.ModuleSource]:
+
+```python
+src = client.mas.get_source("scorer_1_0")
+src.source        # the module source text
+src.version       # the source revision, if reported
+src.raw           # the raw source payload
+```
+
+It raises [`ViyaNotFoundError`][viyapy.ViyaNotFoundError] if the module doesn't
+exist and [`ViyaResponseError`][viyapy.ViyaResponseError] if the response carries
+no usable `source`.
+
+### Update a module's source
+
+[`update_source`][viyapy.mas.MASClient.update_source] replaces a module's source,
+recompiling it in place. MAS guards the update with optimistic concurrency, so
+`update_source` first fetches the module to read its current `ETag` and forwards it
+verbatim as an `If-Match` header — without it the server responds `428 Precondition
+Required`:
+
+```python
+src = client.mas.update_source("scorer_1_0", revised_source)   # reuses the module's language
+src = client.mas.update_source("scorer_1_0", py_source, language="python")  # or override it
+```
+
+When `language` is omitted the module's current language is reused; pass it to
+change the source type. An explicit unsupported `language` raises
+[`ViyaConfigError`][viyapy.ViyaConfigError] before any request; if the server
+reports no `ETag` or no resolvable language, `update_source` raises
+[`ViyaResponseError`][viyapy.ViyaResponseError]. A concurrent modification (stale
+`ETag`) surfaces as a [`ViyaAPIError`][viyapy.ViyaAPIError].
+
+### Delete a module
+
+[`delete`][viyapy.mas.MASClient.delete] removes a module (the server returns `204
+No Content`):
+
+```python
+client.mas.delete("scorer_1_0")
+```
+
+It raises [`ViyaNotFoundError`][viyapy.ViyaNotFoundError] if the module doesn't
+exist and [`ViyaConfigError`][viyapy.ViyaConfigError] for a blank `module_id`.
+
 ## Inspecting a step signature
 
 Before executing a step, you can discover the inputs it expects and the outputs

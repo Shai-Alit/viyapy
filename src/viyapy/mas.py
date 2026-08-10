@@ -11,14 +11,35 @@ from ._validation import (
     check_inputs_against_signature,
     optional_identifier,
     require_identifier,
+    require_non_empty_str,
     require_non_negative_int,
     require_positive_int,
 )
 from .dialects.base import DEFAULT_MAS_STEP, Dialect
-from .exceptions import ViyaValidationError
-from .models import ExecutionResult, MasModule, StepSignature, ValidationResult
+from .exceptions import ViyaConfigError, ViyaResponseError, ViyaValidationError
+from .models import ExecutionResult, MasModule, ModuleSource, StepSignature, ValidationResult
 
 DEFAULT_PAGE_SIZE = 100
+DEFAULT_SCOPE = "public"
+
+# Friendly ``language`` keyword -> the source-language media type MAS expects in a
+# module definition's / source-update's ``type`` field. MAS reports the same
+# languages back on a module payload's ``language`` field, so this also maps a
+# fetched module's language to the media type for a subsequent source update.
+_SOURCE_TYPE_BY_LANGUAGE = {
+    "ds2": "text/vnd.sas.source.ds2",
+    "python": "text/x-python",
+}
+
+
+def _source_type_for_language(language: str, param: str) -> str:
+    """Map a ``language`` keyword to its MAS source media type, or raise."""
+    key = language.strip().lower() if isinstance(language, str) else language
+    source_type = _SOURCE_TYPE_BY_LANGUAGE.get(key)
+    if source_type is None:
+        supported = ", ".join(sorted(_SOURCE_TYPE_BY_LANGUAGE))
+        raise ViyaConfigError(f"{param} must be one of: {supported} (got {language!r})")
+    return source_type
 
 
 def _build_metadata(client_id: str | None, transaction_id: str | None) -> dict[str, str] | None:
@@ -100,6 +121,208 @@ class MASClient:
             accept=self._dialect.mas_module_media_type,
         )
         return self._dialect.parse_module(raw)
+
+    def create(
+        self,
+        module_id: str,
+        source: str,
+        *,
+        language: str = "ds2",
+        scope: str = DEFAULT_SCOPE,
+        description: str | None = None,
+        timeout: float | tuple[float, float] | None = None,
+    ) -> MasModule:
+        """Create a new MAS module from source code.
+
+        Compiles ``source`` server-side into a module identified by ``module_id``.
+        The module then exposes callable steps (typically ``execute``) that
+        :meth:`execute` can run.
+
+        Args:
+            module_id: The id to create the module under. Must be a non-empty
+                string; a module with this id must not already exist.
+            source: The module source code (DS2 or Python), sent verbatim.
+            language: Source language — ``"ds2"`` (default) or ``"python"`` —
+                selecting the source media type MAS compiles the body as.
+            scope: Module scope; MAS requires one (defaults to ``"public"``).
+            description: Optional human-readable description.
+            timeout: Optional per-call timeout override (compilation may need a
+                longer read timeout than a metadata GET).
+
+        Returns:
+            The parsed :class:`MasModule` for the freshly created module.
+
+        Raises:
+            ViyaConfigError: ``module_id``/``scope`` is empty or not a string,
+                ``source`` is empty, or ``language`` is not supported.
+            ViyaAPIError: The server rejected the definition (e.g. a compile error
+                or an id that already exists).
+            ViyaError: On any other failure.
+        """
+        module_id = require_identifier(module_id, "module_id")
+        source = require_non_empty_str(source, "source")
+        scope = require_identifier(scope, "scope")
+        source_type = _source_type_for_language(language, "language")
+        body = self._dialect.build_module_definition(
+            module_id,
+            source,
+            source_type=source_type,
+            scope=scope,
+            description=description,
+        )
+        raw = self._http.request_json(
+            "POST",
+            self._dialect.mas_modules_path(),
+            accept=self._dialect.mas_module_media_type,
+            content_type=self._dialect.mas_module_definition_media_type,
+            json_body=body,
+            timeout=timeout,
+        )
+        return self._dialect.parse_module(raw)
+
+    def get_source(
+        self,
+        module_id: str,
+        *,
+        timeout: float | tuple[float, float] | None = None,
+    ) -> ModuleSource:
+        """Fetch a MAS module's source code.
+
+        Args:
+            module_id: The module id.
+            timeout: Optional per-call timeout override.
+
+        Returns:
+            The parsed :class:`ModuleSource`.
+
+        Raises:
+            ViyaConfigError: ``module_id`` is empty or not a string.
+            ViyaNotFoundError: No module with that id exists.
+            ViyaResponseError: The response was not a usable source payload.
+            ViyaError: On any other failure.
+        """
+        module_id = require_identifier(module_id, "module_id")
+        raw = self._http.request_json(
+            "GET",
+            self._dialect.mas_module_source_path(module_id),
+            accept=self._dialect.mas_module_source_media_type,
+            timeout=timeout,
+        )
+        return self._dialect.parse_module_source(module_id, raw)
+
+    def update_source(
+        self,
+        module_id: str,
+        source: str,
+        *,
+        language: str | None = None,
+        timeout: float | tuple[float, float] | None = None,
+    ) -> ModuleSource:
+        """Replace a MAS module's source code, recompiling it in place.
+
+        MAS guards the source subresource with optimistic concurrency: the update
+        must carry an ``If-Match`` ETag matching the module's current revision, or
+        the server rejects it (HTTP 428). This method fetches the module to obtain
+        that ETag (and, when ``language`` is not given, to reuse the module's
+        current language) and then issues the guarded ``PUT`` — so a concurrent
+        change between the two calls surfaces as a precondition failure rather
+        than a silent overwrite.
+
+        Args:
+            module_id: The id of the module to update. Must already exist.
+            source: The new source code, sent verbatim.
+            language: Source language of ``source`` — ``"ds2"`` or ``"python"``.
+                When ``None`` (default), the module's current language is reused,
+                which is the common case (updating a module in the same language).
+            timeout: Optional per-call timeout override.
+
+        Returns:
+            The parsed :class:`ModuleSource` returned by the update.
+
+        Raises:
+            ViyaConfigError: ``module_id`` is empty or not a string, ``source`` is
+                empty, or an explicit ``language`` is not supported.
+            ViyaNotFoundError: No module with that id exists.
+            ViyaResponseError: The module reported no usable ETag or language, or
+                the update response was not a usable source payload.
+            ViyaAPIError: The server rejected the update (e.g. a compile error, or
+                a 428 if the module changed concurrently).
+            ViyaError: On any other failure.
+        """
+        module_id = require_identifier(module_id, "module_id")
+        source = require_non_empty_str(source, "source")
+        # Validate an explicit language before the network round trip, so a bad
+        # value fails fast at the call site rather than after the module GET.
+        explicit_source_type = (
+            _source_type_for_language(language, "language") if language is not None else None
+        )
+
+        # Fetch the module to get its current ETag (for If-Match) and, when the
+        # caller didn't specify one, its language (to pick the source media type).
+        module_raw, response = self._http.request_json_with_response(
+            "GET",
+            self._dialect.mas_module_path(module_id),
+            accept=self._dialect.mas_module_media_type,
+            timeout=timeout,
+        )
+        etag = response.headers.get("ETag")
+        if not etag:
+            raise ViyaResponseError(
+                f"MAS module {module_id!r} returned no ETag; cannot safely update "
+                "its source without the concurrency guard",
+                response_body=module_raw,
+            )
+        if explicit_source_type is not None:
+            source_type = explicit_source_type
+        else:
+            current = module_raw.get("language")
+            if not isinstance(current, str) or not current.strip():
+                raise ViyaResponseError(
+                    f"MAS module {module_id!r} reported no language; pass language= "
+                    "explicitly to update its source",
+                    response_body=module_raw,
+                )
+            source_type = _source_type_for_language(current, "language")
+
+        body = self._dialect.build_source_update(module_id, source, source_type=source_type)
+        # The ETag comes back already quoted (e.g. '"msnrvegr"'); MAS requires the
+        # If-Match value to keep those quotes, so forward the header value verbatim.
+        raw = self._http.request_json(
+            "PUT",
+            self._dialect.mas_module_source_path(module_id),
+            accept=self._dialect.mas_module_source_media_type,
+            content_type=self._dialect.mas_module_source_media_type,
+            json_body=body,
+            extra_headers={"If-Match": etag},
+            timeout=timeout,
+        )
+        return self._dialect.parse_module_source(module_id, raw)
+
+    def delete(
+        self,
+        module_id: str,
+        *,
+        timeout: float | tuple[float, float] | None = None,
+    ) -> None:
+        """Delete a MAS module.
+
+        Args:
+            module_id: The id of the module to delete.
+            timeout: Optional per-call timeout override.
+
+        Raises:
+            ViyaConfigError: ``module_id`` is empty or not a string.
+            ViyaNotFoundError: No module with that id exists.
+            ViyaError: On any other failure.
+        """
+        module_id = require_identifier(module_id, "module_id")
+        # DELETE returns 204 No Content; use request() (not request_json) so an
+        # empty body isn't mistaken for a malformed JSON response.
+        self._http.request(
+            "DELETE",
+            self._dialect.mas_module_path(module_id),
+            timeout=timeout,
+        )
 
     def get_signature(
         self,

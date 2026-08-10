@@ -10,8 +10,9 @@ from typing import Any
 import pytest
 import responses
 
-from viyapy import StepSignature, ValidationResult, Variable, ViyaClient
+from viyapy import ModuleSource, StepSignature, ValidationResult, Variable, ViyaClient
 from viyapy.exceptions import (
+    ViyaAPIError,
     ViyaConfigError,
     ViyaNotFoundError,
     ViyaResponseError,
@@ -961,3 +962,332 @@ def test_validate_remote_percent_encodes_path_segments() -> None:
     )
     make_client().mas.validate_remote("a/b", {}, step="c?d")
     assert "/validations/modules/a%2Fb/steps/c%3Fd" in responses.calls[0].request.url
+
+
+# -- create ----------------------------------------------------------------
+
+_MODULES_URL = f"{BASE}/microanalyticScore/modules"
+_DS2_SOURCE = "ds2_options sas;\npackage pkg / overwrite=yes;\nendpackage;"
+
+
+@responses.activate
+@pytest.mark.parametrize("generation", ["viya4", "viya35"])
+def test_create_posts_definition_and_parses_module(
+    generation: str, load_fixture: Callable[[str, str], Any], version_for: Callable[[str], str]
+) -> None:
+    raw = load_fixture(generation, "mas_module.json")
+    responses.add(responses.POST, _MODULES_URL, json=raw, status=201)
+
+    module = make_client(version_for(generation)).mas.create("api_tester1_0", _DS2_SOURCE)
+
+    assert module.id == "api_tester1_0"
+    req = responses.calls[0].request
+    # The create body is sent under the `.definition+json` content type (a plain
+    # `.module+json` create body 415s), and the module rep comes back under the
+    # `.module+json` accept type.
+    assert req.headers["Content-Type"] == "application/vnd.sas.microanalytic.module.definition+json"
+    assert req.headers["Accept"] == "application/vnd.sas.microanalytic.module+json"
+    sent = json.loads(req.body)
+    assert sent == {
+        "id": "api_tester1_0",
+        "type": "text/vnd.sas.source.ds2",
+        "scope": "public",
+        "source": _DS2_SOURCE,
+    }
+
+
+@responses.activate
+def test_create_python_language_maps_media_type() -> None:
+    responses.add(responses.POST, _MODULES_URL, json={"id": "m"}, status=201)
+    make_client().mas.create("m", "def execute(a):\n    b = a\n    return b", language="python")
+    sent = json.loads(responses.calls[0].request.body)
+    assert sent["type"] == "text/x-python"
+
+
+@responses.activate
+def test_create_includes_description_and_custom_scope() -> None:
+    responses.add(responses.POST, _MODULES_URL, json={"id": "m"}, status=201)
+    make_client().mas.create("m", _DS2_SOURCE, scope="private", description="hi")
+    sent = json.loads(responses.calls[0].request.body)
+    assert sent["scope"] == "private"
+    assert sent["description"] == "hi"
+
+
+@responses.activate
+def test_create_omits_description_when_absent() -> None:
+    responses.add(responses.POST, _MODULES_URL, json={"id": "m"}, status=201)
+    make_client().mas.create("m", _DS2_SOURCE)
+    sent = json.loads(responses.calls[0].request.body)
+    assert "description" not in sent
+
+
+@responses.activate
+@pytest.mark.parametrize("bad", ["", "   "])
+def test_create_blank_module_id_fails_fast(bad: str) -> None:
+    with pytest.raises(ViyaConfigError):
+        make_client().mas.create(bad, _DS2_SOURCE)
+    assert len(responses.calls) == 0
+
+
+@responses.activate
+@pytest.mark.parametrize("bad", ["", "   "])
+def test_create_blank_source_fails_fast(bad: str) -> None:
+    with pytest.raises(ViyaConfigError):
+        make_client().mas.create("m", bad)
+    assert len(responses.calls) == 0
+
+
+@responses.activate
+@pytest.mark.parametrize("bad", ["", "   "])
+def test_create_blank_scope_fails_fast(bad: str) -> None:
+    with pytest.raises(ViyaConfigError):
+        make_client().mas.create("m", _DS2_SOURCE, scope=bad)
+    assert len(responses.calls) == 0
+
+
+@responses.activate
+@pytest.mark.parametrize("bad", ["java", "", "DS 2", 5])
+def test_create_bad_language_fails_fast(bad: Any) -> None:
+    with pytest.raises(ViyaConfigError):
+        make_client().mas.create("m", _DS2_SOURCE, language=bad)
+    assert len(responses.calls) == 0
+
+
+@responses.activate
+def test_create_language_is_case_insensitive() -> None:
+    responses.add(responses.POST, _MODULES_URL, json={"id": "m"}, status=201)
+    make_client().mas.create("m", _DS2_SOURCE, language="DS2")
+    sent = json.loads(responses.calls[0].request.body)
+    assert sent["type"] == "text/vnd.sas.source.ds2"
+
+
+@responses.activate
+def test_create_compile_error_propagates() -> None:
+    responses.add(responses.POST, _MODULES_URL, json={"message": "compile failed"}, status=400)
+    with pytest.raises(ViyaAPIError):
+        make_client().mas.create("m", _DS2_SOURCE)
+
+
+# -- get_source ------------------------------------------------------------
+
+
+@responses.activate
+@pytest.mark.parametrize("generation", ["viya4", "viya35"])
+def test_get_source_parses_payload(
+    generation: str, load_fixture: Callable[[str, str], Any], version_for: Callable[[str], str]
+) -> None:
+    raw = load_fixture(generation, "mas_module_source.json")
+    url = f"{BASE}/microanalyticScore/modules/api_tester1_0/source"
+    responses.add(responses.GET, url, json=raw, status=200)
+
+    src = make_client(version_for(generation)).mas.get_source("api_tester1_0")
+
+    assert isinstance(src, ModuleSource)
+    assert src.module_id == "api_tester1_0"
+    assert src.source.startswith("ds2_options sas;")
+    assert src.version == 2
+    assert src.modified_by == "sasdemo"
+    assert (
+        responses.calls[0].request.headers["Accept"]
+        == "application/vnd.sas.microanalytic.module.source+json"
+    )
+
+
+@responses.activate
+@pytest.mark.parametrize("bad", ["", "   "])
+def test_get_source_blank_module_id_fails_fast(bad: str) -> None:
+    with pytest.raises(ViyaConfigError):
+        make_client().mas.get_source(bad)
+    assert len(responses.calls) == 0
+
+
+@responses.activate
+def test_get_source_missing_module_raises_not_found() -> None:
+    responses.add(
+        responses.GET,
+        f"{BASE}/microanalyticScore/modules/gone/source",
+        json={"message": "no"},
+        status=404,
+    )
+    with pytest.raises(ViyaNotFoundError):
+        make_client().mas.get_source("gone")
+
+
+@responses.activate
+def test_get_source_without_source_field_raises_response_error() -> None:
+    responses.add(
+        responses.GET,
+        f"{BASE}/microanalyticScore/modules/m/source",
+        json={"moduleId": "m", "version": 1},
+        status=200,
+    )
+    with pytest.raises(ViyaResponseError):
+        make_client().mas.get_source("m")
+
+
+# -- update_source ---------------------------------------------------------
+
+_MODULE_URL = f"{BASE}/microanalyticScore/modules/m"
+_SOURCE_URL = f"{BASE}/microanalyticScore/modules/m/source"
+
+
+def _add_module_get_for_etag(*, etag: str = '"abc123"', language: str = "ds2") -> None:
+    """Register the module GET that update_source makes to obtain the ETag."""
+    responses.add(
+        responses.GET,
+        _MODULE_URL,
+        json={"id": "m", "language": language},
+        status=200,
+        headers={"ETag": etag},
+    )
+
+
+@responses.activate
+def test_update_source_fetches_etag_then_puts_with_if_match() -> None:
+    _add_module_get_for_etag(etag='"rev7"')
+    responses.add(
+        responses.PUT,
+        _SOURCE_URL,
+        json={"moduleId": "m", "source": _DS2_SOURCE, "version": 3},
+        status=200,
+    )
+
+    result = make_client().mas.update_source("m", _DS2_SOURCE)
+
+    assert isinstance(result, ModuleSource)
+    assert result.version == 3
+    get_call, put_call = responses.calls
+    assert get_call.request.method == "GET"
+    assert put_call.request.method == "PUT"
+    # The ETag comes back quoted; it must be forwarded verbatim (quotes kept) as
+    # If-Match — MAS rejects an unquoted value.
+    assert put_call.request.headers["If-Match"] == '"rev7"'
+    assert (
+        put_call.request.headers["Content-Type"]
+        == "application/vnd.sas.microanalytic.module.source+json"
+    )
+    sent = json.loads(put_call.request.body)
+    assert sent == {"moduleId": "m", "type": "text/vnd.sas.source.ds2", "source": _DS2_SOURCE}
+
+
+@responses.activate
+def test_update_source_reuses_module_language() -> None:
+    _add_module_get_for_etag(language="python")
+    responses.add(responses.PUT, _SOURCE_URL, json={"moduleId": "m", "source": "x"}, status=200)
+    make_client().mas.update_source("m", "def execute(a):\n    return a")
+    sent = json.loads(responses.calls[1].request.body)
+    assert sent["type"] == "text/x-python"
+
+
+@responses.activate
+def test_update_source_explicit_language_overrides_module() -> None:
+    _add_module_get_for_etag(language="ds2")
+    responses.add(responses.PUT, _SOURCE_URL, json={"moduleId": "m", "source": "x"}, status=200)
+    make_client().mas.update_source("m", "def execute(a):\n    return a", language="python")
+    sent = json.loads(responses.calls[1].request.body)
+    assert sent["type"] == "text/x-python"
+    # The explicit language means the PUT need not depend on the module's own.
+
+
+@responses.activate
+def test_update_source_missing_etag_raises_response_error() -> None:
+    # Module GET without an ETag header: we cannot form the concurrency guard, so
+    # fail loudly rather than issue an unguarded PUT that would 428 opaquely.
+    responses.add(responses.GET, _MODULE_URL, json={"id": "m", "language": "ds2"}, status=200)
+    with pytest.raises(ViyaResponseError):
+        make_client().mas.update_source("m", _DS2_SOURCE)
+    # Only the GET happened; no PUT was attempted.
+    assert [c.request.method for c in responses.calls] == ["GET"]
+
+
+@responses.activate
+def test_update_source_missing_language_raises_response_error() -> None:
+    responses.add(responses.GET, _MODULE_URL, json={"id": "m"}, status=200, headers={"ETag": '"e"'})
+    with pytest.raises(ViyaResponseError):
+        make_client().mas.update_source("m", _DS2_SOURCE)
+    assert [c.request.method for c in responses.calls] == ["GET"]
+
+
+@responses.activate
+def test_update_source_explicit_language_skips_module_language_need() -> None:
+    # Even when the module omits `language`, an explicit language lets the update
+    # proceed (the ETag is still required and present here).
+    responses.add(responses.GET, _MODULE_URL, json={"id": "m"}, status=200, headers={"ETag": '"e"'})
+    responses.add(responses.PUT, _SOURCE_URL, json={"moduleId": "m", "source": "x"}, status=200)
+    make_client().mas.update_source("m", _DS2_SOURCE, language="ds2")
+    assert responses.calls[1].request.method == "PUT"
+
+
+@responses.activate
+def test_update_source_precondition_failure_propagates() -> None:
+    _add_module_get_for_etag()
+    responses.add(
+        responses.PUT,
+        _SOURCE_URL,
+        json={"errorCode": 1010, "message": "precondition required"},
+        status=428,
+    )
+    with pytest.raises(ViyaAPIError):
+        make_client().mas.update_source("m", _DS2_SOURCE)
+
+
+@responses.activate
+@pytest.mark.parametrize("bad", ["", "   "])
+def test_update_source_blank_module_id_fails_fast(bad: str) -> None:
+    with pytest.raises(ViyaConfigError):
+        make_client().mas.update_source(bad, _DS2_SOURCE)
+    assert len(responses.calls) == 0
+
+
+@responses.activate
+@pytest.mark.parametrize("bad", ["", "   "])
+def test_update_source_blank_source_fails_fast(bad: str) -> None:
+    with pytest.raises(ViyaConfigError):
+        make_client().mas.update_source("m", bad)
+    assert len(responses.calls) == 0
+
+
+@responses.activate
+def test_update_source_bad_explicit_language_fails_fast() -> None:
+    with pytest.raises(ViyaConfigError):
+        make_client().mas.update_source("m", _DS2_SOURCE, language="cobol")
+    assert len(responses.calls) == 0
+
+
+# -- delete ----------------------------------------------------------------
+
+
+@responses.activate
+def test_delete_issues_delete_and_tolerates_empty_body() -> None:
+    # A successful delete is 204 No Content — an empty body must not be treated as
+    # a malformed JSON response.
+    responses.add(responses.DELETE, _MODULE_URL, status=204)
+    assert make_client().mas.delete("m") is None
+    assert responses.calls[0].request.method == "DELETE"
+
+
+@responses.activate
+@pytest.mark.parametrize("bad", ["", "   "])
+def test_delete_blank_module_id_fails_fast(bad: str) -> None:
+    with pytest.raises(ViyaConfigError):
+        make_client().mas.delete(bad)
+    assert len(responses.calls) == 0
+
+
+@responses.activate
+def test_delete_missing_module_raises_not_found() -> None:
+    responses.add(
+        responses.DELETE,
+        f"{BASE}/microanalyticScore/modules/gone",
+        json={"message": "no"},
+        status=404,
+    )
+    with pytest.raises(ViyaNotFoundError):
+        make_client().mas.delete("gone")
+
+
+@responses.activate
+def test_delete_percent_encodes_module_id() -> None:
+    responses.add(responses.DELETE, f"{BASE}/microanalyticScore/modules/a%2Fb", status=204)
+    make_client().mas.delete("a/b")
+    assert "/modules/a%2Fb" in responses.calls[0].request.url
