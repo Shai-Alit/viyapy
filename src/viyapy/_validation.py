@@ -35,6 +35,27 @@ def require_identifier(value: object, name: str) -> str:
     return value.strip()
 
 
+def optional_identifier(value: object, name: str) -> str | None:
+    """Return ``None`` if ``value`` is ``None``, else validate it as an identifier.
+
+    For optional string arguments (e.g. a correlation ``client_id``) where the
+    parameter may be omitted but, when supplied, must be a non-empty string.
+
+    Args:
+        value: The candidate value, or ``None`` to omit it.
+        name: Parameter name, used in the error message.
+
+    Returns:
+        The whitespace-stripped identifier, or ``None`` when omitted.
+
+    Raises:
+        ViyaConfigError: ``value`` is not ``None`` and not a non-empty string.
+    """
+    if value is None:
+        return None
+    return require_identifier(value, name)
+
+
 def require_positive_int(value: object, name: str) -> int:
     """Return ``value`` if it is a positive integer, else raise.
 

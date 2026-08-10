@@ -161,13 +161,22 @@ class ExecutionResult:
     ``execution_state`` distinguishes what happened — use the
     :attr:`completed`, :attr:`timed_out`, and :attr:`submitted` helpers.
 
+    A binary output (one MAS returned with ``encoding: "b64"``) is decoded from
+    base64 back into ``bytes`` in :attr:`outputs`; scalar outputs pass through
+    unchanged. ``client_id`` and ``transaction_id`` echo the correlation metadata
+    the server returned (populated when it was supplied on the request).
+
     Attributes:
         outputs: Mapping of output name to value (empty when timed out or
-            merely submitted).
+            merely submitted). Binary outputs are decoded to ``bytes``.
         execution_state: MAS execution state (``"completed"``, ``"timedOut"``,
             or ``"submitted"``), if present.
         module_id: The executed module id, if reported.
         step_id: The executed step id, if reported.
+        client_id: The correlation ``client_id`` echoed in the response
+            ``metadata``, if present.
+        transaction_id: The correlation ``transaction_id`` echoed in the
+            response ``metadata``, if present.
         raw: The originating execution payload.
     """
 
@@ -175,6 +184,8 @@ class ExecutionResult:
     execution_state: str | None = None
     module_id: str | None = None
     step_id: str | None = None
+    client_id: str | None = None
+    transaction_id: str | None = None
     raw: dict[str, Any] = field(default_factory=dict, repr=False)
 
     def __getitem__(self, key: str) -> Any:

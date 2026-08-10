@@ -9,6 +9,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Binary (base64) MAS I/O and execution correlation metadata on
+  `client.mas.execute`/`submit`. A `bytes`/`bytearray` input value is sent as
+  base64 with `encoding: "b64"` (MAS accepts this for `binary`/`any`-typed
+  variables); binary outputs marked `encoding: "b64"` are decoded back into
+  `bytes` on `ExecutionResult.outputs` (an output that isn't valid base64 raises
+  `ViyaResponseError`). Two new optional arguments, `client_id` and
+  `transaction_id`, are sent in the request `metadata` object and echoed onto the
+  new `ExecutionResult.client_id`/`transaction_id` fields; each must be a
+  non-empty string when given (otherwise `ViyaConfigError` before any request),
+  and omitting them sends no `metadata`. The binary wire shape and the snake_case
+  `metadata.client_id`/`transaction_id` echo were confirmed against a live Viya 4
+  instance; documented in both generation contracts and covered by unit and
+  opt-in live integration tests.
 - Asynchronous MAS execution modes on `client.mas.execute`, surfacing SAS's
   `waitTime` query parameter (milliseconds) as a new `wait_time` argument.
   Omitting it (the default) runs synchronously and returns outputs; a positive

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import base64
 import json
 from collections.abc import Callable
 from typing import Any
@@ -170,6 +171,184 @@ def test_execute_timed_completion_uses_singular_output_on_viya35() -> None:
     result = make_client("3.5").mas.execute("m", {"a": 1}, wait_time=500)
     assert result.completed is True
     assert result.outputs == {"y": 1}
+
+
+# -- binary (b64) I/O ------------------------------------------------------
+
+
+@responses.activate
+@pytest.mark.parametrize("payload", [b"\x00\x01\x02hello", bytearray(b"\x00\x01\x02hello")])
+def test_execute_binary_input_sent_as_b64(payload: bytes | bytearray) -> None:
+    # A bytes/bytearray value is base64-encoded with encoding: "b64" on the wire.
+    responses.add(responses.POST, _EXEC_URL, json={"outputs": [], "executionState": "completed"})
+    make_client().mas.execute("m", {"blob": payload, "n": 7})
+    sent = json.loads(responses.calls[0].request.body)
+    expected_b64 = base64.b64encode(bytes(payload)).decode("ascii")
+    assert {"name": "blob", "value": expected_b64, "encoding": "b64"} in sent["inputs"]
+    # Scalar inputs are untouched — no stray encoding key.
+    assert {"name": "n", "value": 7} in sent["inputs"]
+
+
+@responses.activate
+def test_execute_b64_output_decoded_to_bytes() -> None:
+    blob = b"\x00\x01\x02hello"
+    responses.add(
+        responses.POST,
+        _EXEC_URL,
+        json={
+            "executionState": "completed",
+            "outputs": [
+                {
+                    "name": "blob_out",
+                    "value": base64.b64encode(blob).decode("ascii"),
+                    "encoding": "b64",
+                },
+                {"name": "n", "value": 3},
+            ],
+        },
+    )
+    result = make_client().mas.execute("m", {"a": 1})
+    assert result.outputs["blob_out"] == blob
+    assert isinstance(result.outputs["blob_out"], bytes)
+    assert result.outputs["n"] == 3  # scalar output passes through
+
+
+@responses.activate
+def test_execute_invalid_b64_output_raises() -> None:
+    responses.add(
+        responses.POST,
+        _EXEC_URL,
+        json={
+            "executionState": "completed",
+            "outputs": [{"name": "blob", "value": "not valid base64!!", "encoding": "b64"}],
+        },
+    )
+    with pytest.raises(ViyaResponseError):
+        make_client().mas.execute("m", {"a": 1})
+
+
+@responses.activate
+def test_execute_b64_output_non_string_value_raises() -> None:
+    responses.add(
+        responses.POST,
+        _EXEC_URL,
+        json={
+            "executionState": "completed",
+            "outputs": [{"name": "blob", "value": 123, "encoding": "b64"}],
+        },
+    )
+    with pytest.raises(ViyaResponseError):
+        make_client().mas.execute("m", {"a": 1})
+
+
+@responses.activate
+def test_execute_b64_output_and_metadata_on_viya35() -> None:
+    # The binary decode and metadata echo live in the shared Dialect base, so they
+    # must work on Viya 3.5 too — where synchronous outputs come back under the
+    # singular `output` key. This guards against a future per-generation override
+    # silently breaking 3.5 (per PRODUCTION_PLAN's Viya-version-matrix principle).
+    blob = b"\x00\x01\x02hello"
+    responses.add(
+        responses.POST,
+        _EXEC_URL,
+        json={
+            "executionState": "completed",
+            "output": [
+                {
+                    "name": "blob_out",
+                    "value": base64.b64encode(blob).decode("ascii"),
+                    "encoding": "b64",
+                },
+                {"name": "n", "value": 3},
+            ],
+            "metadata": {"client_id": "cid", "transaction_id": "txn"},
+        },
+    )
+    result = make_client("3.5").mas.execute(
+        "m", {"blob": blob}, client_id="cid", transaction_id="txn"
+    )
+    assert result.outputs["blob_out"] == blob
+    assert isinstance(result.outputs["blob_out"], bytes)
+    assert result.outputs["n"] == 3
+    assert (result.client_id, result.transaction_id) == ("cid", "txn")
+    sent = json.loads(responses.calls[0].request.body)
+    expected_b64 = base64.b64encode(blob).decode("ascii")
+    assert {"name": "blob", "value": expected_b64, "encoding": "b64"} in sent["inputs"]
+    assert sent["metadata"] == {"client_id": "cid", "transaction_id": "txn"}
+
+
+# -- execution metadata (client_id / transaction_id) -----------------------
+
+
+@responses.activate
+def test_execute_sends_metadata_object_when_ids_given() -> None:
+    responses.add(responses.POST, _EXEC_URL, json={"outputs": [], "executionState": "completed"})
+    make_client().mas.execute("m", {"a": 1}, client_id="cid", transaction_id="txn")
+    sent = json.loads(responses.calls[0].request.body)
+    assert sent["metadata"] == {"client_id": "cid", "transaction_id": "txn"}
+
+
+@responses.activate
+def test_execute_omits_metadata_when_no_ids() -> None:
+    responses.add(responses.POST, _EXEC_URL, json={"outputs": [], "executionState": "completed"})
+    make_client().mas.execute("m", {"a": 1})
+    sent = json.loads(responses.calls[0].request.body)
+    assert "metadata" not in sent
+
+
+@responses.activate
+def test_execute_sends_only_given_metadata_id() -> None:
+    responses.add(responses.POST, _EXEC_URL, json={"outputs": [], "executionState": "completed"})
+    make_client().mas.execute("m", {"a": 1}, transaction_id="txn")
+    sent = json.loads(responses.calls[0].request.body)
+    assert sent["metadata"] == {"transaction_id": "txn"}
+
+
+@responses.activate
+def test_execute_parses_metadata_from_response() -> None:
+    responses.add(
+        responses.POST,
+        _EXEC_URL,
+        json={
+            "executionState": "completed",
+            "outputs": [],
+            "metadata": {
+                "transaction_id": "txn",
+                "module_id": "m",
+                "step_id": "execute",
+                "client_id": "cid",
+            },
+        },
+    )
+    result = make_client().mas.execute("m", {"a": 1}, client_id="cid", transaction_id="txn")
+    assert result.client_id == "cid"
+    assert result.transaction_id == "txn"
+
+
+@responses.activate
+def test_execute_metadata_absent_in_response_is_none() -> None:
+    responses.add(responses.POST, _EXEC_URL, json={"outputs": [], "executionState": "completed"})
+    result = make_client().mas.execute("m", {"a": 1})
+    assert result.client_id is None
+    assert result.transaction_id is None
+
+
+@responses.activate
+@pytest.mark.parametrize("field", ["client_id", "transaction_id"])
+@pytest.mark.parametrize("bad", ["", "   ", 5, True])
+def test_execute_bad_metadata_id_fails_fast(field: str, bad: Any) -> None:
+    with pytest.raises(ViyaConfigError):
+        make_client().mas.execute("m", {"a": 1}, **{field: bad})
+    assert len(responses.calls) == 0
+
+
+@responses.activate
+def test_submit_threads_metadata() -> None:
+    responses.add(responses.POST, _EXEC_URL, json={"executionState": "submitted"})
+    make_client().mas.submit("m", {"a": 1}, client_id="cid", transaction_id="txn")
+    sent = json.loads(responses.calls[0].request.body)
+    assert sent["metadata"] == {"client_id": "cid", "transaction_id": "txn"}
+    assert "waitTime=0" in responses.calls[0].request.url
 
 
 # -- list / get ------------------------------------------------------------
