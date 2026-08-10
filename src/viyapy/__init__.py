@@ -28,7 +28,7 @@ from .exceptions import (
     ViyaServerError,
     ViyaTimeoutError,
 )
-from .models import Decision, ExecutionResult, MasModule, ModelStep
+from .models import Decision, ExecutionResult, MasModule, ModelStep, StepSignature, Variable
 
 try:
     __version__ = version("viyapy")
@@ -48,7 +48,9 @@ __all__ = [
     "ExecutionResult",
     "MasModule",
     "ModelStep",
+    "StepSignature",
     "TokenProvider",
+    "Variable",
     "ViyaAPIError",
     "ViyaAuthError",
     "ViyaClient",

@@ -1,0 +1,29 @@
+{
+  "id": "execute",
+  "moduleId": "api_tester1_0",
+  "inputs": [
+    {
+      "name": "input_string",
+      "type": "string",
+      "dim": 0,
+      "size": 256
+    }
+  ],
+  "outputs": [
+    {
+      "name": "output_string",
+      "type": "string",
+      "dim": 0,
+      "size": 256
+    }
+  ],
+  "links": [
+    {
+      "method": "GET",
+      "rel": "self",
+      "href": "/microanalyticScore/modules/api_tester1_0/steps/execute",
+      "type": "application/vnd.sas.microanalytic.module.step"
+    }
+  ],
+  "version": 2
+}

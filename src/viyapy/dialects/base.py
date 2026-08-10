@@ -13,11 +13,26 @@ from typing import Any
 from urllib.parse import quote
 
 from ..exceptions import ViyaResponseError
-from ..models import Decision, ExecutionResult, MasModule, ModelStep
+from ..models import Decision, ExecutionResult, MasModule, ModelStep, StepSignature, Variable
 
 MODEL_STEP_TYPE = "application/vnd.sas.decision.step.model"
 DEFAULT_MAS_STEP = "execute"
 MAS_MODULE_MEDIA_TYPE = "application/vnd.sas.microanalytic.module+json"
+MAS_STEP_MEDIA_TYPE = "application/vnd.sas.microanalytic.module.step+json"
+
+
+def _coerce_int(value: Any) -> int | None:
+    """Return ``value`` if it is a real ``int`` (``bool`` excluded), else ``None``."""
+    if isinstance(value, bool) or not isinstance(value, int):
+        return None
+    return value
+
+
+def _prefer_str(value: Any, fallback: str) -> str:
+    """Return ``value`` stripped if it is a non-empty string, else ``fallback``."""
+    if isinstance(value, str) and value.strip():
+        return value.strip()
+    return fallback
 
 
 class Dialect:
@@ -34,6 +49,7 @@ class Dialect:
     name: str
     decision_media_type: str = "application/vnd.sas.decision+json"
     mas_module_media_type: str = MAS_MODULE_MEDIA_TYPE
+    mas_step_media_type: str = MAS_STEP_MEDIA_TYPE
     outputs_keys: tuple[str, ...] = ("outputs", "output")
 
     # -- endpoint paths -----------------------------------------------------
@@ -63,6 +79,15 @@ class Dialect:
             f"/microanalyticScore/modules/{quote(module_id, safe='')}"
             f"/steps/{quote(step_id, safe='')}"
         )
+
+    def mas_step_path(self, module_id: str, step_id: str = DEFAULT_MAS_STEP) -> str:
+        """Return the relative path for a MAS step's signature (metadata ``GET``).
+
+        This is the same resource URL as :meth:`mas_execute_path` — a ``GET``
+        returns the step's input/output signature, a ``POST`` executes it — so
+        the same percent-encoding guarantees apply.
+        """
+        return self.mas_execute_path(module_id, step_id)
 
     # -- request building ---------------------------------------------------
 
@@ -131,6 +156,59 @@ class Dialect:
             modified_timestamp=raw.get("modifiedTimeStamp"),
             raw=dict(raw),
         )
+
+    def parse_step_signature(
+        self, module_id: str, step_id: str, raw: Mapping[str, Any]
+    ) -> StepSignature:
+        """Build a :class:`StepSignature` from a MAS step payload.
+
+        The step's identity comes from the request (``module_id``/``step_id``);
+        the payload's own ``id``/``moduleId`` are preferred when present. Each
+        entry of the ``inputs`` and ``outputs`` arrays becomes a :class:`Variable`;
+        malformed or nameless entries are skipped rather than crashing the parse.
+
+        Raises:
+            ViyaResponseError: The payload carries neither an ``inputs`` nor an
+                ``outputs`` list — without either it isn't a usable signature, so
+                a malformed response fails loudly here rather than returning an
+                empty shape that looks like a real (but signatureless) step.
+        """
+        inputs_raw = raw.get("inputs")
+        outputs_raw = raw.get("outputs")
+        if not isinstance(inputs_raw, list) and not isinstance(outputs_raw, list):
+            raise ViyaResponseError(
+                "MAS step signature payload has no 'inputs' or 'outputs' list",
+                response_body=dict(raw),
+            )
+        return StepSignature(
+            id=_prefer_str(raw.get("id"), step_id),
+            module_id=_prefer_str(raw.get("moduleId"), module_id),
+            inputs=self._parse_variables(inputs_raw),
+            outputs=self._parse_variables(outputs_raw),
+            raw=dict(raw),
+        )
+
+    def _parse_variables(self, items: Any) -> tuple[Variable, ...]:
+        """Parse a signature's ``inputs``/``outputs`` array into :class:`Variable`s."""
+        if not isinstance(items, list):
+            return ()
+        variables: list[Variable] = []
+        for item in items:
+            if not isinstance(item, Mapping):
+                continue
+            name = item.get("name")
+            if not isinstance(name, str) or not name.strip():
+                continue  # a nameless entry can't be addressed; skip it
+            var_type = item.get("type")
+            variables.append(
+                Variable(
+                    name=name.strip(),
+                    type=var_type if isinstance(var_type, str) else None,
+                    dim=_coerce_int(item.get("dim")),
+                    size=_coerce_int(item.get("size")),
+                )
+            )
+        return tuple(variables)
 
     def parse_execution(
         self, module_id: str, step_id: str, raw: Mapping[str, Any]

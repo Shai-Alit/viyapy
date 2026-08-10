@@ -9,6 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- MAS step signatures: `client.mas.get_signature(module_id, step="execute")`
+  fetches a module step's input/output signature as the new typed
+  `StepSignature` (with `inputs`/`outputs` tuples of `Variable(name, type, dim,
+  size)`, both exported from the package root, raw payload on `.raw`). Useful for
+  validating a payload or building a form before calling `execute`. Blank
+  `module_id`/`step` fail fast with `ViyaConfigError`; a response that isn't a
+  usable signature raises `ViyaResponseError`. Declared as the
+  `get_mas_module_step_signature` endpoint in both generation contracts with
+  per-generation fixtures, and added as a required endpoint in the drift gate.
 - MAS module introspection: `client.mas.list()` iterates the deployment's MAS
   modules (lazily, following the collection's pagination links) and
   `client.mas.get(module_id)` fetches a single module's metadata, both returning

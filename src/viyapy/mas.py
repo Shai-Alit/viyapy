@@ -9,7 +9,7 @@ from ._http import HttpClient
 from ._pagination import iter_collection
 from ._validation import require_identifier, require_positive_int
 from .dialects.base import DEFAULT_MAS_STEP, Dialect
-from .models import ExecutionResult, MasModule
+from .models import ExecutionResult, MasModule, StepSignature
 
 DEFAULT_PAGE_SIZE = 100
 
@@ -78,6 +78,35 @@ class MASClient:
             accept=self._dialect.mas_module_media_type,
         )
         return self._dialect.parse_module(raw)
+
+    def get_signature(self, module_id: str, step: str = DEFAULT_MAS_STEP) -> StepSignature:
+        """Fetch the input/output signature of a MAS module step.
+
+        Use this to discover a step's expected inputs and outputs (names, types,
+        dimensions) before calling :meth:`execute` — for example to validate a
+        payload client-side or to build a form.
+
+        Args:
+            module_id: The module id.
+            step: The step whose signature to fetch (defaults to ``"execute"``).
+
+        Returns:
+            The parsed :class:`StepSignature`.
+
+        Raises:
+            ViyaConfigError: ``module_id`` or ``step`` is empty or not a string.
+            ViyaNotFoundError: No such module or step exists.
+            ViyaResponseError: The response was not a usable step signature.
+            ViyaError: On any other failure.
+        """
+        module_id = require_identifier(module_id, "module_id")
+        step = require_identifier(step, "step")
+        raw = self._http.request_json(
+            "GET",
+            self._dialect.mas_step_path(module_id, step),
+            accept=self._dialect.mas_step_media_type,
+        )
+        return self._dialect.parse_step_signature(module_id, step, raw)
 
     def execute(
         self,

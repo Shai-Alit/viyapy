@@ -34,6 +34,33 @@ module.raw               # the raw module payload
 id, and both methods raise [`ViyaConfigError`][viyapy.ViyaConfigError] for an
 invalid `module_id` or `page_size` before any request is issued.
 
+## Inspecting a step signature
+
+Before executing a step, you can discover the inputs it expects and the outputs
+it produces. [`get_signature`][viyapy.mas.MASClient.get_signature] returns a typed
+[`StepSignature`][viyapy.StepSignature] whose `inputs` and `outputs` are tuples of
+[`Variable`][viyapy.Variable] (`name`, `type`, `dim`, `size`):
+
+```python
+sig = client.mas.get_signature("api_tester1_0")   # step defaults to "execute"
+
+sig.id                                  # "execute"
+sig.module_id                           # "api_tester1_0"
+[v.name for v in sig.inputs]            # ["input_string"]
+sig.inputs[0].type                      # "string"
+sig.outputs[0].name                     # "output_string"
+
+# Handy for validating a payload before you execute:
+expected = {v.name for v in sig.inputs}
+missing = expected - payload.keys()
+```
+
+Pass `step=` to inspect a named step other than `execute`. `get_signature` raises
+[`ViyaNotFoundError`][viyapy.ViyaNotFoundError] if the module or step doesn't
+exist, [`ViyaConfigError`][viyapy.ViyaConfigError] for a blank `module_id`/`step`
+(before any request), and [`ViyaResponseError`][viyapy.ViyaResponseError] if the
+response isn't a usable signature.
+
 ## Execute a module
 
 [`execute`][viyapy.mas.MASClient.execute] posts a feature mapping to a module's

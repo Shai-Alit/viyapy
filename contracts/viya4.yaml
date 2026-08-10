@@ -39,3 +39,10 @@ endpoints:
     accept: application/vnd.sas.microanalytic.module+json
     # Fields the client reads off a single module payload.
     response_fields: [id, name, stepIds]
+
+  - id: get_mas_module_step_signature
+    method: GET
+    path: /microanalyticScore/modules/{module_id}/steps/{step_id}
+    accept: application/vnd.sas.microanalytic.module.step+json
+    # A step's input/output signature; each list entry is a name/type/dim/size.
+    response_fields: [id, moduleId, inputs, outputs]
