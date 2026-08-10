@@ -144,6 +144,34 @@ def test_execute_completed_without_output_list_still_raises() -> None:
         make_client().mas.execute("m", {"a": 1})
 
 
+@responses.activate
+@pytest.mark.parametrize("state", ["timedOut", "submitted"])
+def test_execute_async_states_parse_empty_on_viya35(state: str) -> None:
+    # The async-mode tolerance lives in the shared base dialect and keys only on
+    # executionState, so an empty async response parses on Viya 3.5 too — even
+    # though 3.5 carries synchronous outputs under `output` (singular), not
+    # `outputs`. Guards against the output-vs-outputs shape bug this lib has a
+    # history with regressing.
+    responses.add(responses.POST, _EXEC_URL, json={"executionState": state})
+    result = make_client("3.5").mas.execute("m", {"a": 1}, wait_time=1)
+    assert result.execution_state == state
+    assert result.outputs == {}
+
+
+@responses.activate
+def test_execute_timed_completion_uses_singular_output_on_viya35() -> None:
+    # A timed run that *does* finish on Viya 3.5 returns outputs under the
+    # singular `output` key; confirm the dialect still flattens them.
+    responses.add(
+        responses.POST,
+        _EXEC_URL,
+        json={"executionState": "completed", "output": [{"name": "y", "value": 1}]},
+    )
+    result = make_client("3.5").mas.execute("m", {"a": 1}, wait_time=500)
+    assert result.completed is True
+    assert result.outputs == {"y": 1}
+
+
 # -- list / get ------------------------------------------------------------
 
 

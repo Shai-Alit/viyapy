@@ -189,7 +189,14 @@ class ExecutionResult:
 
     @property
     def completed(self) -> bool:
-        """Whether the step finished; ``outputs`` are populated."""
+        """Whether the step finished; ``outputs`` are populated.
+
+        Keyed on an exact ``execution_state == "completed"`` match, so this
+        returns ``False`` when the server omits ``executionState`` entirely
+        (``execution_state is None``) even though ``outputs`` may be fully
+        populated. Check ``outputs`` directly if you need to handle a
+        deployment that doesn't report the state on a synchronous run.
+        """
         return self.execution_state == EXECUTION_COMPLETED
 
     @property
