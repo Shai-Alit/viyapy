@@ -20,13 +20,20 @@ endpoints:
     method: POST
     path: /microanalyticScore/modules/{module_id}/steps/{step_id}
     request_fields: [inputs]
+    # Binary inputs/outputs: an input or output object may carry `encoding: "b64"`
+    # with a base64 string value (MAS accepts this for `binary`/`any`-typed vars).
+    # Correlation metadata is optional: a sibling `metadata` object on the request
+    # with snake_case `client_id`/`transaction_id`, which MAS echoes on the
+    # response `metadata` (alongside server-added `module_id`/`step_id`). Both are
+    # optional, so they stay out of the checked `request_fields` (build_inputs
+    # omits them unless supplied).
     # Optional `waitTime` query param (milliseconds) selects the execution mode:
     # omitted = synchronous (executionState `completed`); positive = timed
     # (`completed` or `timedOut`); 0 = fire-and-forget (`submitted`).
     query_params: [waitTime]
     # Viya 3.5 returns synchronous results under `output` (singular).
     outputs_key: output
-    response_fields: [executionState, moduleId, stepId]
+    response_fields: [executionState, moduleId, stepId, metadata]
 
   - id: list_mas_modules
     method: GET

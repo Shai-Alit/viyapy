@@ -176,6 +176,41 @@ request body as JSON — values pass through unchanged, with **no** string
 concatenation and **no** name-mangling (the 2.x helper's trailing-underscore bug
 is gone). Quotes, newlines, and unicode in values are handled correctly.
 
+## Binary inputs and outputs
+
+Pass a `bytes` (or `bytearray`) value to send binary data. viyapy base64-encodes
+it and marks the input with `encoding: "b64"` on the wire, which is how MAS
+accepts binary — the target variable must be a `binary` or `any` type on the
+server (a scalar type rejects a b64 value with a `400`). Binary **outputs** come
+back the same way and are decoded for you back into `bytes`:
+
+```python
+result = client.mas.execute("image_scorer", {"photo": image_bytes})
+result.outputs["thumbnail"]        # bytes — decoded from the server's base64
+```
+
+Scalar inputs and outputs alongside binary ones pass through unchanged. A binary
+output whose value isn't valid base64 raises
+[`ViyaResponseError`][viyapy.ViyaResponseError].
+
+## Correlation metadata
+
+Pass `client_id` and/or `transaction_id` to tag an execution for correlation
+(e.g. tracing a request across systems, or grouping calls by client). They are
+sent in the request's `metadata` object and echoed back on the result:
+
+```python
+result = client.mas.execute(
+    "api_tester1_0", inputs, client_id="checkout-svc", transaction_id="order-42"
+)
+result.client_id        # "checkout-svc"
+result.transaction_id   # "order-42"
+```
+
+Both are optional; when omitted, no `metadata` is sent. Each must be a non-empty
+string when given, or [`ViyaConfigError`][viyapy.ViyaConfigError] is raised before
+the request. `submit` accepts the same two arguments.
+
 ## The step id
 
 The step defaults to `"execute"`, which is correct for a **published decision**

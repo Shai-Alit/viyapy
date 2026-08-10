@@ -8,6 +8,8 @@ one stable interface instead of branching on version inline.
 
 from __future__ import annotations
 
+import base64
+import binascii
 from collections.abc import Mapping
 from typing import Any
 from urllib.parse import quote
@@ -47,6 +49,13 @@ def _prefer_str(value: Any, fallback: str) -> str:
     if isinstance(value, str) and value.strip():
         return value.strip()
     return fallback
+
+
+def _str_or_none(value: Any) -> str | None:
+    """Return ``value`` if it is a non-empty string, else ``None``."""
+    if isinstance(value, str) and value.strip():
+        return value
+    return None
 
 
 class Dialect:
@@ -119,16 +128,43 @@ class Dialect:
 
     # -- request building ---------------------------------------------------
 
-    def build_inputs(self, features: Mapping[str, Any]) -> dict[str, Any]:
+    def build_inputs(
+        self,
+        features: Mapping[str, Any],
+        *,
+        metadata: Mapping[str, Any] | None = None,
+    ) -> dict[str, Any]:
         """Build a MAS step-input request body from a feature mapping.
 
         Used both for executing a step (``POST /steps/{step}``) and for validating
         its inputs (``POST`` to the validations endpoint) — the two share the same
-        ``{"inputs": [{"name", "value"}, ...]}`` body shape. Values are passed
-        through as-is and serialized as JSON by the HTTP layer (no string
+        ``{"inputs": [{"name", "value"}, ...]}`` body shape. Scalar values are
+        passed through as-is and serialized as JSON by the HTTP layer (no string
         concatenation, no implicit name-mangling).
+
+        A ``bytes``/``bytearray`` value is treated as *binary*: it is base64-encoded
+        and its input object carries ``"encoding": "b64"``, which is how MAS accepts
+        binary data (the target variable must be a ``binary``/``any`` type on the
+        server). ``metadata``, when given, is attached as a sibling ``metadata``
+        object for correlation (e.g. ``client_id``/``transaction_id``); MAS echoes
+        it back on the response.
         """
-        return {"inputs": [{"name": name, "value": value} for name, value in features.items()]}
+        body: dict[str, Any] = {
+            "inputs": [self._build_input(name, value) for name, value in features.items()]
+        }
+        if metadata:
+            body["metadata"] = dict(metadata)
+        return body
+
+    def _build_input(self, name: str, value: Any) -> dict[str, Any]:
+        """Build a single step-input entry, base64-encoding binary values."""
+        if isinstance(value, (bytes, bytearray)):
+            return {
+                "name": name,
+                "value": base64.b64encode(bytes(value)).decode("ascii"),
+                "encoding": "b64",
+            }
+        return {"name": name, "value": value}
 
     # -- response parsing ---------------------------------------------------
 
@@ -251,20 +287,49 @@ class Dialect:
         completed response carries no output list. The timed-out and submitted
         modes legitimately return no outputs, so those are parsed as an empty
         mapping rather than an error.
+
+        A binary output (one MAS marks with ``encoding: "b64"``) has its base64
+        string value decoded back into ``bytes``; scalar outputs pass through. Any
+        correlation ``metadata`` the server echoes (``client_id``/``transaction_id``)
+        is surfaced on the result.
         """
         state = raw.get("executionState")
         outputs = {
-            item["name"]: item.get("value")
+            item["name"]: self._output_value(item, raw)
             for item in self._raw_outputs(raw, state)
             if isinstance(item, Mapping) and "name" in item
         }
+        metadata = raw.get("metadata")
+        metadata = metadata if isinstance(metadata, Mapping) else {}
         return ExecutionResult(
             outputs=outputs,
             execution_state=state,
             module_id=raw.get("moduleId", module_id),
             step_id=raw.get("stepId", step_id),
+            client_id=_str_or_none(metadata.get("client_id")),
+            transaction_id=_str_or_none(metadata.get("transaction_id")),
             raw=dict(raw),
         )
+
+    def _output_value(self, item: Mapping[str, Any], raw: Mapping[str, Any]) -> Any:
+        """Return an output's value, decoding it from base64 if MAS marked it binary."""
+        value = item.get("value")
+        if item.get("encoding") != "b64":
+            return value
+        if not isinstance(value, str):
+            raise ViyaResponseError(
+                f"MAS output {item.get('name')!r} is marked encoding 'b64' but its "
+                f"value is not a base64 string (got {type(value).__name__})",
+                response_body=dict(raw),
+            )
+        try:
+            return base64.b64decode(value, validate=True)
+        except (binascii.Error, ValueError) as exc:
+            raise ViyaResponseError(
+                f"MAS output {item.get('name')!r} is marked encoding 'b64' but its "
+                "value is not valid base64",
+                response_body=dict(raw),
+            ) from exc
 
     def _raw_outputs(self, raw: Mapping[str, Any], state: Any = None) -> list[Any]:
         for key in self.outputs_keys:

@@ -74,6 +74,18 @@ def _check_submit(client: ViyaClient, module_id: str, inputs_json: str | None) -
     assert result.outputs == {}
 
 
+def _check_metadata(client: ViyaClient, module_id: str, inputs_json: str | None) -> None:
+    inputs = json.loads(inputs_json) if inputs_json else {}
+    # MAS echoes correlation ids supplied in the request metadata back on the
+    # response, so a round trip should surface them on the result.
+    result = client.mas.execute(
+        module_id, inputs, client_id="viyapy-live", transaction_id="viyapy-live-txn"
+    )
+    assert isinstance(result, ExecutionResult)
+    assert result.client_id == "viyapy-live"
+    assert result.transaction_id == "viyapy-live-txn"
+
+
 def _run(prefix: str, version: str, kind: str) -> None:
     env = _require(prefix)
     if kind == "decision":
@@ -89,6 +101,8 @@ def _run(prefix: str, version: str, kind: str) -> None:
             _check_validate(client, env["module"], env["inputs"])
         elif kind == "submit":
             _check_submit(client, env["module"], env["inputs"])
+        elif kind == "metadata":
+            _check_metadata(client, env["module"], env["inputs"])
         else:
             _check_mas(client, env["module"], env["inputs"])
 
@@ -112,6 +126,10 @@ def test_viya4_mas_submit() -> None:
     _run("VIYAPY_TEST_4", "4", "submit")
 
 
+def test_viya4_mas_metadata() -> None:
+    _run("VIYAPY_TEST_4", "4", "metadata")
+
+
 # -- Viya 3.5 (scaffold — skipped until a 3.5 instance is available) --------
 
 
@@ -129,3 +147,7 @@ def test_viya35_mas_validate() -> None:
 
 def test_viya35_mas_submit() -> None:
     _run("VIYAPY_TEST_35", "3.5", "submit")
+
+
+def test_viya35_mas_metadata() -> None:
+    _run("VIYAPY_TEST_35", "3.5", "metadata")

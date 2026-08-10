@@ -2,6 +2,7 @@
   "moduleId": "api_tester1_0",
   "stepId": "execute",
   "executionState": "completed",
+  "metadata": { "module_id": "api_tester1_0", "step_id": "execute" },
   "output": [
     { "name": "input_string", "value": "this is a test" },
     { "name": "output_string", "value": "successfully ran decision flow" }

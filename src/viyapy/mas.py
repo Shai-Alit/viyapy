@@ -9,6 +9,7 @@ from ._http import HttpClient
 from ._pagination import iter_collection
 from ._validation import (
     check_inputs_against_signature,
+    optional_identifier,
     require_identifier,
     require_non_negative_int,
     require_positive_int,
@@ -18,6 +19,21 @@ from .exceptions import ViyaValidationError
 from .models import ExecutionResult, MasModule, StepSignature, ValidationResult
 
 DEFAULT_PAGE_SIZE = 100
+
+
+def _build_metadata(client_id: str | None, transaction_id: str | None) -> dict[str, str] | None:
+    """Build the request ``metadata`` object, or ``None`` if no ids were given.
+
+    MAS reads correlation ids from snake_case ``client_id``/``transaction_id``
+    keys inside a ``metadata`` object and echoes them on the response; omitted
+    ids are left out entirely rather than sent as ``null``.
+    """
+    metadata: dict[str, str] = {}
+    if client_id is not None:
+        metadata["client_id"] = client_id
+    if transaction_id is not None:
+        metadata["transaction_id"] = transaction_id
+    return metadata or None
 
 
 class MASClient:
@@ -235,6 +251,8 @@ class MASClient:
         step: str = DEFAULT_MAS_STEP,
         validate: bool = False,
         wait_time: int | None = None,
+        client_id: str | None = None,
+        transaction_id: str | None = None,
         timeout: float | tuple[float, float] | None = None,
     ) -> ExecutionResult:
         """Execute a MAS module step against a mapping of inputs.
@@ -252,11 +270,17 @@ class MASClient:
           ``outputs`` and ``execution_state == "submitted"``. See :meth:`submit`
           for a named shortcut.
 
+        Binary inputs are passed as ``bytes`` (or ``bytearray``) values in
+        ``inputs``: they are base64-encoded on the wire with ``encoding: "b64"``,
+        which MAS accepts for ``binary``/``any``-typed variables. Binary outputs
+        are decoded back into ``bytes`` on :attr:`ExecutionResult.outputs`.
+
         Args:
             module_id: The published module id (for a published decision this is
                 the module name; the step defaults to ``"execute"``).
-            inputs: Feature name/value mapping. Serialized as JSON — values are
-                passed through unchanged (no name-mangling).
+            inputs: Feature name/value mapping. Serialized as JSON — scalar values
+                are passed through unchanged (no name-mangling); ``bytes``/
+                ``bytearray`` values are sent as base64-encoded binary.
             step: The module step to execute.
             validate: When ``True``, fetch the step signature and validate the
                 inputs against it before executing (an extra round trip), raising
@@ -267,6 +291,12 @@ class MASClient:
                 execution mode (see above). Must be a non-negative integer when
                 given. This is distinct from ``timeout``, which bounds the HTTP
                 call itself.
+            client_id: Optional correlation id sent in the request ``metadata`` and
+                echoed on :attr:`ExecutionResult.client_id`. Must be a non-empty
+                string when given.
+            transaction_id: Optional correlation id sent in the request ``metadata``
+                and echoed on :attr:`ExecutionResult.transaction_id`. Must be a
+                non-empty string when given.
             timeout: Optional per-call timeout override (MAS execution may need a
                 longer read timeout than a metadata GET).
 
@@ -274,8 +304,9 @@ class MASClient:
             The parsed :class:`ExecutionResult`.
 
         Raises:
-            ViyaConfigError: ``module_id``/``step`` is empty or not a string, or
-                ``wait_time`` is not a non-negative integer.
+            ViyaConfigError: ``module_id``/``step`` is empty or not a string,
+                ``wait_time`` is not a non-negative integer, or ``client_id``/
+                ``transaction_id`` is given but not a non-empty string.
             ViyaNotFoundError: The module or step does not exist.
             ViyaResponseError: A completed response lacked an output list.
             ViyaValidationError: ``validate`` is set and the inputs do not match
@@ -284,16 +315,19 @@ class MASClient:
         """
         module_id = require_identifier(module_id, "module_id")
         step = require_identifier(step, "step")
+        client_id = optional_identifier(client_id, "client_id")
+        transaction_id = optional_identifier(transaction_id, "transaction_id")
         params: dict[str, Any] | None = None
         if wait_time is not None:
             params = {"waitTime": require_non_negative_int(wait_time, "wait_time")}
         if validate:
             self.validate(module_id, inputs, step=step, timeout=timeout)
+        metadata = _build_metadata(client_id, transaction_id)
         raw = self._http.request_json(
             "POST",
             self._dialect.mas_execute_path(module_id, step),
             content_type="application/json",
-            json_body=self._dialect.build_inputs(inputs),
+            json_body=self._dialect.build_inputs(inputs, metadata=metadata),
             params=params,
             timeout=timeout,
         )
@@ -306,6 +340,8 @@ class MASClient:
         *,
         step: str = DEFAULT_MAS_STEP,
         validate: bool = False,
+        client_id: str | None = None,
+        transaction_id: str | None = None,
         timeout: float | tuple[float, float] | None = None,
     ) -> ExecutionResult:
         """Submit a MAS step for fire-and-forget execution, without waiting.
@@ -319,17 +355,22 @@ class MASClient:
 
         Args:
             module_id: The published module id.
-            inputs: Feature name/value mapping.
+            inputs: Feature name/value mapping (``bytes`` values sent as binary).
             step: The module step to execute.
             validate: When ``True``, validate the inputs against the step
                 signature before submitting (an extra round trip).
+            client_id: Optional correlation id sent in the request ``metadata``.
+            transaction_id: Optional correlation id sent in the request
+                ``metadata``.
             timeout: Optional per-call timeout override.
 
         Returns:
             The parsed :class:`ExecutionResult`, with ``submitted`` set.
 
         Raises:
-            ViyaConfigError: ``module_id`` or ``step`` is empty or not a string.
+            ViyaConfigError: ``module_id`` or ``step`` is empty or not a string,
+                or ``client_id``/``transaction_id`` is given but not a non-empty
+                string.
             ViyaNotFoundError: The module or step does not exist.
             ViyaValidationError: ``validate`` is set and the inputs do not match
                 the step signature.
@@ -341,5 +382,7 @@ class MASClient:
             step=step,
             validate=validate,
             wait_time=0,
+            client_id=client_id,
+            transaction_id=transaction_id,
             timeout=timeout,
         )
