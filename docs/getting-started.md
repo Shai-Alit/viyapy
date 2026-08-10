@@ -2,17 +2,6 @@
 
 ## Install
 
-!!! note "Pre-release"
-    The `ViyaClient` API documented here ships in **viyapy 3.0**, which is not
-    yet published to PyPI (the current PyPI release predates this API). Until 3.0
-    is released, install from source:
-
-    ```bash
-    pip install "git+https://github.com/Shai-Alit/viyapy@main"
-    ```
-
-Once 3.0 is published, the usual install applies:
-
 ```bash
 pip install viyapy
 ```
