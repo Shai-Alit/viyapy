@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Removed the stale "pre-release / install from source" note from the README and
+  the getting-started guide. viyapy is published on PyPI, so `pip install viyapy`
+  is the install path; the note lingered on the PyPI project description.
+
 ## [3.1.0] - 2026-08-09
 
 ### Added
