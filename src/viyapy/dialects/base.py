@@ -9,7 +9,6 @@ one stable interface instead of branching on version inline.
 from __future__ import annotations
 
 import base64
-import binascii
 from collections.abc import Mapping
 from typing import Any
 from urllib.parse import quote
@@ -324,7 +323,7 @@ class Dialect:
             )
         try:
             return base64.b64decode(value, validate=True)
-        except (binascii.Error, ValueError) as exc:
+        except ValueError as exc:  # binascii.Error subclasses ValueError
             raise ViyaResponseError(
                 f"MAS output {item.get('name')!r} is marked encoding 'b64' but its "
                 "value is not valid base64",

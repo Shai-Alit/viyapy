@@ -241,6 +241,42 @@ def test_execute_b64_output_non_string_value_raises() -> None:
         make_client().mas.execute("m", {"a": 1})
 
 
+@responses.activate
+def test_execute_b64_output_and_metadata_on_viya35() -> None:
+    # The binary decode and metadata echo live in the shared Dialect base, so they
+    # must work on Viya 3.5 too — where synchronous outputs come back under the
+    # singular `output` key. This guards against a future per-generation override
+    # silently breaking 3.5 (per PRODUCTION_PLAN's Viya-version-matrix principle).
+    blob = b"\x00\x01\x02hello"
+    responses.add(
+        responses.POST,
+        _EXEC_URL,
+        json={
+            "executionState": "completed",
+            "output": [
+                {
+                    "name": "blob_out",
+                    "value": base64.b64encode(blob).decode("ascii"),
+                    "encoding": "b64",
+                },
+                {"name": "n", "value": 3},
+            ],
+            "metadata": {"client_id": "cid", "transaction_id": "txn"},
+        },
+    )
+    result = make_client("3.5").mas.execute(
+        "m", {"blob": blob}, client_id="cid", transaction_id="txn"
+    )
+    assert result.outputs["blob_out"] == blob
+    assert isinstance(result.outputs["blob_out"], bytes)
+    assert result.outputs["n"] == 3
+    assert (result.client_id, result.transaction_id) == ("cid", "txn")
+    sent = json.loads(responses.calls[0].request.body)
+    expected_b64 = base64.b64encode(blob).decode("ascii")
+    assert {"name": "blob", "value": expected_b64, "encoding": "b64"} in sent["inputs"]
+    assert sent["metadata"] == {"client_id": "cid", "transaction_id": "txn"}
+
+
 # -- execution metadata (client_id / transaction_id) -----------------------
 
 
