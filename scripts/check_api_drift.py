@@ -260,6 +260,14 @@ def _check_generation(name: str, entry: dict[str, Any], problems: list[str]) -> 
                 f"{tag} decision code Accept: code {dialect.decision_code_media_type!r} "
                 f"!= contract {code['accept']!r}"
             )
+        # The raw response is read verbatim via request_text, so the client sends
+        # the same media type it expects back; keep the contract's documented
+        # response_media_type honest by pinning it to accept.
+        if "response_media_type" in code and code["response_media_type"] != code["accept"]:
+            problems.append(
+                f"{tag} decision code response_media_type {code['response_media_type']!r} "
+                f"!= accept {code['accept']!r}"
+            )
         if not hasattr(DecisionsAPI, "get_code"):
             problems.append(
                 f"{tag} contract declares get_decision_code but DecisionsAPI.get_code is missing"
@@ -277,6 +285,14 @@ def _check_generation(name: str, entry: dict[str, Any], problems: list[str]) -> 
             problems.append(
                 f"{tag} decision revision code Accept: code {dialect.decision_code_media_type!r} "
                 f"!= contract {rev_code['accept']!r}"
+            )
+        if (
+            "response_media_type" in rev_code
+            and rev_code["response_media_type"] != rev_code["accept"]
+        ):
+            problems.append(
+                f"{tag} decision revision code response_media_type "
+                f"{rev_code['response_media_type']!r} != accept {rev_code['accept']!r}"
             )
         if not hasattr(DecisionsAPI, "get_revision_code"):
             problems.append(

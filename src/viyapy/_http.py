@@ -307,10 +307,22 @@ class HttpClient:
         (``text/vnd.sas.source.ds2``). The body is returned verbatim as
         :attr:`requests.Response.text`.
 
+        If the server omits a ``charset`` from the ``Content-Type`` header,
+        :mod:`requests` decodes ``text/*`` bodies as ISO-8859-1 (and otherwise
+        falls back to charset guessing) — either of which can mis-decode
+        non-ASCII bytes. Since these payloads are documented as
+        UTF-8-compatible source text, default the decoding to UTF-8 whenever
+        the server did not declare an explicit charset, for a deterministic
+        result.
+
         Raises:
             (everything :meth:`request` raises)
         """
-        return self.request(method, path, **kwargs).text
+        response = self.request(method, path, **kwargs)
+        content_type = response.headers.get("Content-Type", "")
+        if "charset=" not in content_type.lower():
+            response.encoding = "utf-8"
+        return response.text
 
     @staticmethod
     def _parse_json_object(response: requests.Response) -> dict[str, Any]:

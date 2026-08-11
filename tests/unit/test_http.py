@@ -432,6 +432,37 @@ def test_request_text_returns_body_verbatim() -> None:
 
 
 @responses.activate
+def test_request_text_defaults_to_utf8_when_charset_absent() -> None:
+    # When the server omits a charset, requests would decode text/* as
+    # ISO-8859-1 (mangling multi-byte UTF-8); request_text forces UTF-8 so a
+    # DS2 comment with non-ASCII bytes round-trips.
+    body = "/* rançon café — naïve */\npackage p; endpackage;"
+    responses.add(
+        responses.GET,
+        f"{BASE}/x",
+        body=body.encode("utf-8"),
+        status=200,
+        content_type="text/vnd.sas.source.ds2",  # no charset
+    )
+    result = make_client().request_text("GET", "/x", accept="text/vnd.sas.source.ds2")
+    assert result == body
+
+
+@responses.activate
+def test_request_text_honors_declared_charset() -> None:
+    # An explicit charset is respected rather than overridden.
+    body = "/* café */"
+    responses.add(
+        responses.GET,
+        f"{BASE}/x",
+        body=body.encode("utf-8"),
+        status=200,
+        content_type="text/vnd.sas.source.ds2;charset=UTF-8",
+    )
+    assert make_client().request_text("GET", "/x") == body
+
+
+@responses.activate
 def test_request_text_raises_on_error_status() -> None:
     responses.add(responses.GET, f"{BASE}/x", json={"message": "no"}, status=404)
     with pytest.raises(ViyaNotFoundError):
