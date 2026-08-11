@@ -48,7 +48,10 @@ SKIP_RE = re.compile(r"\[(skip[- ]review|no[- ]review|skip ai[- ]?review)\]", re
 # Only diffs up to this many characters are sent to the model; larger PRs are
 # truncated with a marker so the request stays bounded and cheap.
 MAX_DIFF_CHARS = 200_000
-MAX_OUTPUT_TOKENS = 8000
+# Reasoning/Codex models spend hidden reasoning tokens out of this same budget
+# before emitting any visible text, so it must be generous — too small a value
+# lets a large diff exhaust the budget on reasoning and return an empty message.
+MAX_OUTPUT_TOKENS = 32000
 SEVERITY_ORDER = ("blocking", "major", "minor", "nit")
 SEVERITY_LABEL = {
     "blocking": "🔴 Blocking",
@@ -242,12 +245,28 @@ def call_model(diff_blob: str) -> dict[str, Any]:
     req.add_header("Content-Type", "application/json")
     try:
         with urllib.request.urlopen(req, timeout=180) as resp:  # noqa: S310 (configured host)
-            data = json.loads(resp.read().decode())
+            raw = resp.read().decode()
     except urllib.error.HTTPError as exc:
         detail = exc.read().decode(errors="replace")[:500]
         raise RuntimeError(f"Azure OpenAI call failed ({exc.code}): {detail}") from exc
 
+    # Distinguish an empty HTTP body from a valid payload with no visible text, so
+    # a future failure names the real cause instead of an opaque char-0 parse error.
+    if not raw.strip():
+        raise RuntimeError("Azure OpenAI returned an empty response body (HTTP 200, no payload).")
+    data = json.loads(raw)
+
+    # A reasoning/Codex model can burn the whole token budget on hidden reasoning
+    # and return status "incomplete" with no message text. Surface that explicitly.
     content = _extract_output_text(data)
+    if not content.strip():
+        details = data.get("incomplete_details")
+        reason = str(details.get("reason") or "") if isinstance(details, dict) else ""
+        raise RuntimeError(
+            f"Azure OpenAI returned no assistant text (status={data.get('status')!r}, "
+            f"incomplete_reason={reason!r}); the model likely spent the whole "
+            "max_output_tokens budget on reasoning — raise MAX_OUTPUT_TOKENS."
+        )
     return _parse_json(content)
 
 
