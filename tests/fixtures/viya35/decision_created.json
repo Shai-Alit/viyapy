@@ -1,0 +1,18 @@
+{
+  "id": "new-flow-abc123",
+  "name": "Throwaway Flow",
+  "description": "created by viyapy tests",
+  "majorRevision": 1,
+  "minorRevision": 0,
+  "checkout": false,
+  "version": 2,
+  "validationStatus": "none",
+  "decisionId": null,
+  "flow": {
+    "steps": []
+  },
+  "createdBy": "testuser",
+  "modifiedBy": "testuser",
+  "creationTimeStamp": "2026-08-11T12:00:00Z",
+  "modifiedTimeStamp": "2026-08-11T12:00:00Z"
+}

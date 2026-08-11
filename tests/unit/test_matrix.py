@@ -120,3 +120,46 @@ def test_decision_external_artifacts_across_generations(
 
     rev_arts = client.decisions.revision_external_artifacts("d1", "rev")
     assert [a.name for a in rev_arts] == [a.name for a in arts]
+
+
+@responses.activate
+def test_decision_create_across_generations(
+    generation: str,
+    version_for: Callable[[str], str],
+    load_fixture: Callable[[str, str], Any],
+) -> None:
+    raw = load_fixture(generation, "decision_created.json")
+    responses.add(responses.POST, f"{BASE}/decisions/flows", json=raw, status=201)
+
+    client = ViyaClient(BASE, TOKEN, viya_version=version_for(generation), max_retries=0)
+
+    # Both generations POST the same decision media type and parse the assigned id.
+    decision = client.decisions.create("Throwaway Flow", {"steps": []})
+    assert decision.id == "new-flow-abc123"
+    req = responses.calls[0].request
+    assert req.headers["Content-Type"] == "application/vnd.sas.decision+json"
+    assert req.headers["Accept"] == "application/vnd.sas.decision+json"
+
+
+@responses.activate
+def test_decision_update_delete_across_generations(
+    generation: str,
+    version_for: Callable[[str], str],
+    load_fixture: Callable[[str, str], Any],
+) -> None:
+    raw = load_fixture(generation, "decision_created.json")
+    url = f"{BASE}/decisions/flows/d1"
+    responses.add(responses.GET, url, json=raw, status=200, headers={"ETag": '"e1"'})
+    responses.add(responses.PUT, url, json=raw, status=200)
+    responses.add(responses.DELETE, url, status=204)
+
+    client = ViyaClient(BASE, TOKEN, viya_version=version_for(generation), max_retries=0)
+
+    # Update reads the ETag then PUTs it back as If-Match, identically per generation.
+    client.decisions.update("d1", description="changed")
+    put_call = responses.calls[1].request
+    assert put_call.method == "PUT"
+    assert put_call.headers["If-Match"] == '"e1"'
+
+    # Delete tolerates the empty 204 body.
+    assert client.decisions.delete("d1") is None

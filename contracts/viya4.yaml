@@ -84,6 +84,37 @@ endpoints:
     response_fields: [items]
     item_fields: [name, artifactType, parentURI, artifactProperties]
 
+  - id: create_decision_flow
+    method: POST
+    path: /decisions/flows
+    # Create sends the authorable subset (name + optional description/flow/
+    # signature/properties) under the decision media type for BOTH Content-Type
+    # and Accept; the server assigns id/revision numbers and returns the full
+    # representation. The flow graph is passed through raw (phase 5.4a — a typed
+    # builder is deferred to 5.4b).
+    content_type: application/vnd.sas.decision+json
+    request_fields: [name, description, flow]
+    accept: application/vnd.sas.decision+json
+    response_fields: [id]
+
+  - id: update_decision_flow
+    method: PUT
+    path: /decisions/flows/{decision_id}
+    content_type: application/vnd.sas.decision+json
+    request_fields: [name, description, flow]
+    accept: application/vnd.sas.decision+json
+    # Optimistic concurrency: the PUT REQUIRES an `If-Match` header carrying the
+    # flow's current ETag (returned by GET flow); without it the server responds
+    # 428 Precondition Required (a stale ETag responds 412).
+    required_headers: [If-Match]
+    response_fields: [id]
+
+  - id: delete_decision_flow
+    method: DELETE
+    path: /decisions/flows/{decision_id}
+    # Returns 204 No Content (no response body).
+    response_fields: []
+
   - id: execute_mas_step
     method: POST
     path: /microanalyticScore/modules/{module_id}/steps/{step_id}

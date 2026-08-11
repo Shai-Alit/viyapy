@@ -30,6 +30,7 @@ from viyapy import (
     ValidationResult,
     ViyaClient,
 )
+from viyapy.exceptions import ViyaNotFoundError
 
 pytestmark = pytest.mark.integration
 
@@ -259,6 +260,36 @@ def _check_compile_job(client: ViyaClient) -> None:
             client.mas.delete(module_id)
 
 
+def _check_decision_crud(client: ViyaClient) -> None:
+    # Full lifecycle against the live server: create a throwaway decision flow,
+    # read it back, update its description (exercising the ETag/If-Match round
+    # trip), then delete it and confirm it's gone. The flow name is unique per run
+    # so repeated runs don't collide, and the delete runs in a finally so a
+    # mid-test failure still cleans up.
+    name = f"viyapy_crud_{os.getpid()}"
+    created_id: str | None = None
+    try:
+        decision = client.decisions.create(name, {"steps": []}, description="viyapy live CRUD")
+        assert isinstance(decision, Decision)
+        created_id = decision.id
+        assert created_id
+        # A freshly created flow starts at revision 1.0.
+        assert decision.major_revision == 1
+
+        fetched = client.decisions.get(created_id)
+        assert fetched.id == created_id
+
+        updated = client.decisions.update(created_id, description="viyapy live CRUD v2")
+        assert isinstance(updated, Decision)
+        assert updated.id == created_id
+    finally:
+        if created_id:
+            client.decisions.delete(created_id)
+            # The flow is gone: a follow-up get now 404s.
+            with pytest.raises(ViyaNotFoundError):
+                client.decisions.get(created_id)
+
+
 def _run(prefix: str, version: str, kind: str) -> None:
     env = _require(prefix)
     if kind == "decision":
@@ -308,6 +339,14 @@ def _run(prefix: str, version: str, kind: str) -> None:
             pytest.skip(f"{prefix}_ALLOW_CRUD not set (module-mutating test)")
         with ViyaClient(env["host"], env["token"], viya_version=version) as client:  # type: ignore[arg-type]
             _check_compile_job(client)
+        return
+    if kind == "decision_crud":
+        # The decision CRUD lifecycle creates and deletes a flow, so gate it
+        # behind the same explicit opt-in as the MAS mutating tests.
+        if not os.getenv(f"{prefix}_ALLOW_CRUD"):
+            pytest.skip(f"{prefix}_ALLOW_CRUD not set (decision-mutating test)")
+        with ViyaClient(env["host"], env["token"], viya_version=version) as client:  # type: ignore[arg-type]
+            _check_decision_crud(client)
         return
     if not env["module"]:
         pytest.skip(f"{prefix}_MODULE not set")
@@ -369,6 +408,10 @@ def test_viya4_mas_compile_job() -> None:
     _run("VIYAPY_TEST_4", "4", "compile_job")
 
 
+def test_viya4_decision_crud() -> None:
+    _run("VIYAPY_TEST_4", "4", "decision_crud")
+
+
 # -- Viya 3.5 (scaffold — skipped until a 3.5 instance is available) --------
 
 
@@ -414,3 +457,7 @@ def test_viya35_mas_crud() -> None:
 
 def test_viya35_mas_compile_job() -> None:
     _run("VIYAPY_TEST_35", "3.5", "compile_job")
+
+
+def test_viya35_decision_crud() -> None:
+    _run("VIYAPY_TEST_35", "3.5", "decision_crud")

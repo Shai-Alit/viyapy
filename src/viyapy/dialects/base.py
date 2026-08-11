@@ -322,6 +322,36 @@ class Dialect:
         """
         return {"moduleId": module_id, "type": source_type, "source": source}
 
+    def build_decision_definition(
+        self,
+        name: str,
+        *,
+        description: str | None = None,
+        flow: Mapping[str, Any] | None = None,
+        signature: Any | None = None,
+        properties: Any | None = None,
+    ) -> dict[str, Any]:
+        """Build the request body for a decision flow (``POST``/``PUT`` flows).
+
+        The authorable representation is a small subset of the full decision
+        payload the server returns: ``name`` (required) plus the optional
+        ``description``, ``flow`` (the raw step graph — for phase 5.4a this is
+        passed through verbatim rather than assembled from a typed builder),
+        ``signature``, and ``properties``. Absent fields are omitted rather than
+        sent as ``null``, so a create can send just ``name`` and a ``flow`` and an
+        update can carry a full round-tripped representation.
+        """
+        body: dict[str, Any] = {"name": name}
+        if description is not None:
+            body["description"] = description
+        if flow is not None:
+            body["flow"] = dict(flow)
+        if signature is not None:
+            body["signature"] = signature
+        if properties is not None:
+            body["properties"] = properties
+        return body
+
     # -- response parsing ---------------------------------------------------
 
     def parse_decision_summary(self, raw: Mapping[str, Any]) -> DecisionSummary:

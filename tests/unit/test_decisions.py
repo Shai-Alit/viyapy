@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from collections.abc import Callable
 from typing import Any
 
@@ -9,7 +10,12 @@ import pytest
 import responses
 
 from viyapy import Decision, DecisionSummary, ExternalArtifact, Revision, ViyaClient
-from viyapy.exceptions import ViyaConfigError, ViyaNotFoundError, ViyaResponseError
+from viyapy.exceptions import (
+    ViyaAPIError,
+    ViyaConfigError,
+    ViyaNotFoundError,
+    ViyaResponseError,
+)
 
 BASE = "https://viya.example.com"
 _FLOWS_URL = f"{BASE}/decisions/flows"
@@ -538,3 +544,251 @@ def test_revision_external_artifacts_percent_encodes_ids() -> None:
     make_client().decisions.revision_external_artifacts("weird/id", "weird/rev")
     url = responses.calls[0].request.url
     assert "/decisions/flows/weird%2Fid/revisions/weird%2Frev/externalArtifacts" in url
+
+
+# -- create ----------------------------------------------------------------
+
+_DECISION_MEDIA = "application/vnd.sas.decision+json"
+
+
+@responses.activate
+def test_create_posts_definition_and_parses_decision(
+    generation: str,
+    version_for: Callable[[str], str],
+    load_fixture: Callable[[str, str], Any],
+) -> None:
+    raw = load_fixture(generation, "decision_created.json")
+    responses.add(responses.POST, _FLOWS_URL, json=raw, status=201)
+
+    decision = make_client(version_for(generation)).decisions.create(
+        "Throwaway Flow", {"steps": []}, description="created by viyapy tests"
+    )
+
+    # The server assigns the id/revision numbers; we surface them from the body.
+    assert isinstance(decision, Decision)
+    assert decision.id == "new-flow-abc123"
+    assert decision.major_revision == 1
+    assert decision.minor_revision == 0
+    req = responses.calls[0].request
+    # Both the request Content-Type and the Accept are the decision media type.
+    assert req.headers["Content-Type"] == _DECISION_MEDIA
+    assert req.headers["Accept"] == _DECISION_MEDIA
+    sent = json.loads(req.body)
+    assert sent == {
+        "name": "Throwaway Flow",
+        "description": "created by viyapy tests",
+        "flow": {"steps": []},
+    }
+
+
+@responses.activate
+def test_create_omits_optional_fields_when_absent() -> None:
+    responses.add(responses.POST, _FLOWS_URL, json={"id": "x", "name": "n"}, status=201)
+    make_client().decisions.create("n", {"steps": []})
+    sent = json.loads(responses.calls[0].request.body)
+    assert sent == {"name": "n", "flow": {"steps": []}}
+    assert "description" not in sent
+    assert "signature" not in sent
+    assert "properties" not in sent
+
+
+@responses.activate
+def test_create_forwards_signature_and_properties() -> None:
+    responses.add(responses.POST, _FLOWS_URL, json={"id": "x", "name": "n"}, status=201)
+    sig = {"variables": [{"name": "score", "dataType": "decimal"}]}
+    props = {"custom": "value"}
+    make_client().decisions.create("n", {"steps": []}, signature=sig, properties=props)
+    sent = json.loads(responses.calls[0].request.body)
+    assert sent["signature"] == sig
+    assert sent["properties"] == props
+
+
+@responses.activate
+@pytest.mark.parametrize("bad", ["", "   "])
+def test_create_blank_name_fails_fast(bad: str) -> None:
+    with pytest.raises(ViyaConfigError):
+        make_client().decisions.create(bad, {"steps": []})
+    assert len(responses.calls) == 0
+
+
+@responses.activate
+@pytest.mark.parametrize("bad", [None, "steps", 42, ["steps"]])
+def test_create_non_mapping_flow_fails_fast(bad: Any) -> None:
+    with pytest.raises(ViyaConfigError):
+        make_client().decisions.create("n", bad)
+    assert len(responses.calls) == 0
+
+
+@responses.activate
+def test_create_response_without_id_raises_response_error() -> None:
+    responses.add(responses.POST, _FLOWS_URL, json={"name": "no id"}, status=201)
+    with pytest.raises(ViyaResponseError):
+        make_client().decisions.create("n", {"steps": []})
+
+
+# -- update ----------------------------------------------------------------
+
+_UPDATE_URL = f"{BASE}/decisions/flows/d1"
+
+
+def _add_flow_get_for_etag(*, etag: str = '"rev3"', body: dict[str, Any] | None = None) -> None:
+    """Register the flow GET that update() makes to obtain the ETag + current rep."""
+    responses.add(
+        responses.GET,
+        _UPDATE_URL,
+        json=body or {"id": "d1", "name": "Old Name", "flow": {"steps": [{"a": 1}]}},
+        status=200,
+        headers={"ETag": etag},
+    )
+
+
+@responses.activate
+def test_update_fetches_etag_then_puts_with_if_match() -> None:
+    _add_flow_get_for_etag(etag='"rev3"')
+    responses.add(responses.PUT, _UPDATE_URL, json={"id": "d1", "name": "New Name"}, status=200)
+
+    decision = make_client().decisions.update("d1", name="New Name")
+
+    assert isinstance(decision, Decision)
+    get_call, put_call = responses.calls
+    assert get_call.request.method == "GET"
+    assert put_call.request.method == "PUT"
+    # The ETag comes back quoted; it must be forwarded verbatim as If-Match.
+    assert put_call.request.headers["If-Match"] == '"rev3"'
+    assert put_call.request.headers["Content-Type"] == _DECISION_MEDIA
+    assert put_call.request.headers["Accept"] == _DECISION_MEDIA
+
+
+@responses.activate
+def test_update_overlays_provided_fields_and_preserves_the_rest() -> None:
+    # Current rep has a name and flow; we only change the description, so the PUT
+    # must carry the fetched name/flow unchanged alongside the new description.
+    _add_flow_get_for_etag(body={"id": "d1", "name": "Old Name", "flow": {"steps": [{"a": 1}]}})
+    responses.add(responses.PUT, _UPDATE_URL, json={"id": "d1"}, status=200)
+
+    make_client().decisions.update("d1", description="fresh description")
+
+    sent = json.loads(responses.calls[1].request.body)
+    assert sent["name"] == "Old Name"
+    assert sent["flow"] == {"steps": [{"a": 1}]}
+    assert sent["description"] == "fresh description"
+
+
+@responses.activate
+def test_update_new_flow_replaces_current_flow() -> None:
+    _add_flow_get_for_etag(body={"id": "d1", "name": "Old Name", "flow": {"steps": []}})
+    responses.add(responses.PUT, _UPDATE_URL, json={"id": "d1"}, status=200)
+
+    make_client().decisions.update("d1", flow={"steps": [{"type": "new"}]})
+
+    sent = json.loads(responses.calls[1].request.body)
+    assert sent["flow"] == {"steps": [{"type": "new"}]}
+
+
+@responses.activate
+def test_update_no_fields_to_change_fails_fast() -> None:
+    with pytest.raises(ViyaConfigError):
+        make_client().decisions.update("d1")
+    assert len(responses.calls) == 0
+
+
+@responses.activate
+@pytest.mark.parametrize("bad_id", ["", "   "])
+def test_update_blank_decision_id_fails_fast(bad_id: str) -> None:
+    with pytest.raises(ViyaConfigError):
+        make_client().decisions.update(bad_id, name="x")
+    assert len(responses.calls) == 0
+
+
+@responses.activate
+@pytest.mark.parametrize("bad", ["", "   "])
+def test_update_blank_name_fails_fast(bad: str) -> None:
+    # An explicit but blank name is rejected before any network round trip.
+    with pytest.raises(ViyaConfigError):
+        make_client().decisions.update("d1", name=bad)
+    assert len(responses.calls) == 0
+
+
+@responses.activate
+@pytest.mark.parametrize("bad", ["steps", 42, ["steps"]])
+def test_update_non_mapping_flow_fails_fast(bad: Any) -> None:
+    with pytest.raises(ViyaConfigError):
+        make_client().decisions.update("d1", flow=bad)
+    assert len(responses.calls) == 0
+
+
+@responses.activate
+def test_update_missing_etag_raises_response_error() -> None:
+    # Flow GET without an ETag header: we cannot form the concurrency guard, so
+    # fail loudly rather than issue an unguarded PUT that would 428 opaquely.
+    responses.add(responses.GET, _UPDATE_URL, json={"id": "d1", "name": "n"}, status=200)
+    with pytest.raises(ViyaResponseError):
+        make_client().decisions.update("d1", name="x")
+    assert [c.request.method for c in responses.calls] == ["GET"]
+
+
+@responses.activate
+def test_update_precondition_failure_propagates() -> None:
+    _add_flow_get_for_etag()
+    responses.add(
+        responses.PUT,
+        _UPDATE_URL,
+        json={"message": "precondition failed"},
+        status=412,
+    )
+    with pytest.raises(ViyaAPIError):
+        make_client().decisions.update("d1", name="x")
+
+
+@responses.activate
+def test_update_missing_decision_raises_not_found() -> None:
+    responses.add(responses.GET, _UPDATE_URL, json={"message": "no"}, status=404)
+    with pytest.raises(ViyaNotFoundError):
+        make_client().decisions.update("d1", name="x")
+
+
+@responses.activate
+def test_update_percent_encodes_decision_id() -> None:
+    url = f"{BASE}/decisions/flows/weird%2Fid"
+    responses.add(
+        responses.GET, url, json={"id": "x", "name": "n"}, status=200, headers={"ETag": '"e"'}
+    )
+    responses.add(responses.PUT, url, json={"id": "x"}, status=200)
+    make_client().decisions.update("weird/id", name="x")
+    assert "/decisions/flows/weird%2Fid" in responses.calls[0].request.url
+
+
+# -- delete ----------------------------------------------------------------
+
+
+@responses.activate
+def test_delete_issues_delete_and_tolerates_empty_body() -> None:
+    # A successful delete is 204 No Content — an empty body must not be treated as
+    # a malformed JSON response.
+    responses.add(responses.DELETE, _UPDATE_URL, status=204)
+    assert make_client().decisions.delete("d1") is None
+    assert responses.calls[0].request.method == "DELETE"
+
+
+@responses.activate
+@pytest.mark.parametrize("bad_id", ["", "   "])
+def test_delete_blank_decision_id_fails_fast(bad_id: str) -> None:
+    with pytest.raises(ViyaConfigError):
+        make_client().decisions.delete(bad_id)
+    assert len(responses.calls) == 0
+
+
+@responses.activate
+def test_delete_missing_decision_raises_not_found() -> None:
+    responses.add(
+        responses.DELETE, f"{BASE}/decisions/flows/gone", json={"message": "no"}, status=404
+    )
+    with pytest.raises(ViyaNotFoundError):
+        make_client().decisions.delete("gone")
+
+
+@responses.activate
+def test_delete_percent_encodes_decision_id() -> None:
+    responses.add(responses.DELETE, f"{BASE}/decisions/flows/weird%2Fid", status=204)
+    make_client().decisions.delete("weird/id")
+    assert "/decisions/flows/weird%2Fid" in responses.calls[0].request.url
