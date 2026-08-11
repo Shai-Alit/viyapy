@@ -6,7 +6,7 @@ import dataclasses
 
 import pytest
 
-from viyapy.models import CompileJob, Decision, ExecutionResult, ModelStep
+from viyapy.models import CompileJob, Decision, ExecutionResult, ModelStep, Revision
 
 
 def test_model_step_defaults() -> None:
@@ -20,6 +20,42 @@ def test_decision_holds_models() -> None:
     decision = Decision(id="d1", name="Demo", models=(ModelStep(name="M"),))
     assert decision.id == "d1"
     assert decision.models[0].name == "M"
+
+
+def test_decision_revision_metadata_defaults_to_none() -> None:
+    # The revision/lock metadata is additive and optional — a decision built
+    # without it must report None, not a coerced default.
+    decision = Decision(id="d1")
+    assert decision.major_revision is None
+    assert decision.minor_revision is None
+    assert decision.checkout is None
+
+
+def test_revision_defaults() -> None:
+    revision = Revision(id="r1")
+    assert revision.id == "r1"
+    assert revision.major_revision is None
+    assert revision.checkout is None
+    assert revision.raw == {}
+
+
+def test_revision_label_composes_major_minor() -> None:
+    assert Revision(id="r1", major_revision=1, minor_revision=3).label == "1.3"
+    # A real 0.0 is a valid label, distinct from unknown.
+    assert Revision(id="r1", major_revision=0, minor_revision=0).label == "0.0"
+
+
+@pytest.mark.parametrize(
+    "kwargs",
+    [{}, {"major_revision": 1}, {"minor_revision": 2}],
+)
+def test_revision_label_is_none_when_incomplete(kwargs: dict[str, int]) -> None:
+    # Missing either component yields None so callers can tell it apart from 0.0.
+    assert Revision(id="r1", **kwargs).label is None
+
+
+def test_revision_raw_excluded_from_repr() -> None:
+    assert "payload" not in repr(Revision(id="r1", raw={"big": "payload"}))
 
 
 def test_dataclasses_are_frozen() -> None:

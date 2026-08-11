@@ -9,6 +9,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Reading a decision flow's revision history on `client.decisions`.
+  `revisions(flow_id)` lazily paginates `GET /decisions/flows/{id}/revisions`
+  and yields a new lightweight `Revision` per entry — the `major.minor` version
+  pair (with a convenience `label`), a `checkout` lock indicator, node count,
+  and audit metadata; `get_revision(flow_id, revision_id)` returns the flow's
+  full `Decision` content *at* that revision. A plain `get(flow_id)` now also
+  surfaces the current revision's `major_revision`/`minor_revision`/`checkout`
+  (additive, defaulting to `None` when the server omits them). Both read
+  operations come from a reusable `RevisionsMixin` (a foundation for later
+  ruleset revisions and lock/unlock), and `Revision` is exported from the
+  package root. The revision wire shapes were confirmed against a live Viya 4
+  instance; pinned in both generation contracts and covered by unit and opt-in
+  live integration tests.
 - Listing decision flows on `client.decisions`. `list()` lazily paginates
   `GET /decisions/flows` (following the collection's `next` links) and yields a
   new lightweight `DecisionSummary` per flow — identity plus audit metadata

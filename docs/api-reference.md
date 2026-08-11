@@ -9,6 +9,8 @@ Generated from the source docstrings — this reference cannot drift from the co
 ## Operations
 
 ::: viyapy.decisions.DecisionsAPI
+    options:
+      inherited_members: true
 
 ::: viyapy.mas.MASClient
 

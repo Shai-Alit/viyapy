@@ -25,6 +25,7 @@ from viyapy import (
     ExecutionResult,
     MasModule,
     ModuleSource,
+    Revision,
     ValidationResult,
     ViyaClient,
 )
@@ -67,6 +68,30 @@ def _check_decision_list(client: ViyaClient) -> None:
         assert isinstance(summary.raw, dict)
         if seen >= 4:  # a bounded slice — 5 items is plenty to assert the shape
             break
+
+
+def _check_decision_revisions(client: ViyaClient, decision_id: str) -> None:
+    # Read-only: page the flow's revision history, assert each entry parses into
+    # a Revision with a usable id, then fetch the newest one in full and confirm
+    # it round-trips to a Decision. Bounded slice keeps it O(1); an empty history
+    # is tolerated (the round trip and parsing are what matter).
+    first_revision_id: str | None = None
+    for seen, revision in enumerate(client.decisions.revisions(decision_id)):
+        assert isinstance(revision, Revision)
+        assert isinstance(revision.id, str)
+        assert revision.id
+        assert isinstance(revision.raw, dict)
+        if first_revision_id is None:
+            first_revision_id = revision.id
+        if seen >= 4:  # a bounded slice — 5 items is plenty to assert the shape
+            break
+
+    if first_revision_id is not None:
+        at_revision = client.decisions.get_revision(decision_id, first_revision_id)
+        assert isinstance(at_revision, Decision)
+        assert at_revision.id == first_revision_id
+        assert isinstance(at_revision.raw, dict)
+        assert isinstance(at_revision.models, tuple)
 
 
 def _check_mas(client: ViyaClient, module_id: str, inputs_json: str | None) -> None:
@@ -206,6 +231,13 @@ def _run(prefix: str, version: str, kind: str) -> None:
         with ViyaClient(env["host"], env["token"], viya_version=version) as client:  # type: ignore[arg-type]
             _check_decision_list(client)
         return
+    if kind == "decision_revisions":
+        # Read-only, but keyed on a specific flow's revision history.
+        if not env["decision"]:
+            pytest.skip(f"{prefix}_DECISION not set")
+        with ViyaClient(env["host"], env["token"], viya_version=version) as client:  # type: ignore[arg-type]
+            _check_decision_revisions(client, env["decision"])
+        return
     if kind == "crud":
         # The CRUD lifecycle creates and deletes a module, so it's gated behind a
         # separate explicit opt-in to avoid mutating a deployment by surprise.
@@ -246,6 +278,10 @@ def test_viya4_decisions_list() -> None:
     _run("VIYAPY_TEST_4", "4", "decision_list")
 
 
+def test_viya4_decision_revisions() -> None:
+    _run("VIYAPY_TEST_4", "4", "decision_revisions")
+
+
 def test_viya4_mas_execute() -> None:
     _run("VIYAPY_TEST_4", "4", "mas")
 
@@ -279,6 +315,10 @@ def test_viya35_decision_get() -> None:
 
 def test_viya35_decisions_list() -> None:
     _run("VIYAPY_TEST_35", "3.5", "decision_list")
+
+
+def test_viya35_decision_revisions() -> None:
+    _run("VIYAPY_TEST_35", "3.5", "decision_revisions")
 
 
 def test_viya35_mas_execute() -> None:

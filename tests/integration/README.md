@@ -19,7 +19,7 @@ Per generation (`VIYAPY_TEST_4_*` for Viya 4, `VIYAPY_TEST_35_*` for Viya 3.5):
 |---|---|---|
 | `<PREFIX>_HOST` | yes | Base URL, e.g. `https://viya.example.com` |
 | `<PREFIX>_TOKEN` | yes | OAuth2 bearer token |
-| `<PREFIX>_DECISION` | for the decision test | A decision id to `GET` |
+| `<PREFIX>_DECISION` | for the decision + revisions tests | A decision id to `GET` (and whose revision history to read) |
 | `<PREFIX>_MODULE` | for the MAS execute/validate/submit/metadata tests | A published module id |
 | `<PREFIX>_INPUTS` | optional | JSON object of MAS inputs (default `{}`) |
 | `<PREFIX>_ALLOW_CRUD` | for the MAS CRUD lifecycle test | Set to any value to opt in to the module-mutating create/update/delete test |
@@ -38,6 +38,12 @@ Per generation there are several tests, all driven by the variables above:
   flows (`client.decisions.list()`) and checks each item parses into a
   `DecisionSummary` with a usable id. Read-only, needs no `<PREFIX>_DECISION`, and
   tolerates an empty deployment (it only takes a bounded slice of the results).
+- **decision revisions** (`<PREFIX>_DECISION`) — read-only: pages the flow's
+  revision history (`client.decisions.revisions(...)`), checking each entry parses
+  into a `Revision` with a usable id, then fetches the newest revision in full via
+  `client.decisions.get_revision(...)` and asserts it round-trips into a
+  `Decision`. Tolerates a flow with no separate revision history (it only takes a
+  bounded slice, and skips the `get_revision` step if the slice is empty).
 - **mas execute** (`<PREFIX>_MODULE`, `<PREFIX>_INPUTS`) — executes the module
   step and checks the outputs parse.
 - **mas validate** (`<PREFIX>_MODULE`, `<PREFIX>_INPUTS`) — POSTs the inputs to the

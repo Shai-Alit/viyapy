@@ -1,0 +1,69 @@
+{
+  "name": "revisions",
+  "accept": "application/vnd.sas.summary",
+  "start": 0,
+  "count": 2,
+  "limit": 100,
+  "items": [
+    {
+      "creationTimeStamp": "2026-06-24T02:23:05.809Z",
+      "modifiedTimeStamp": "2026-06-24T02:23:05.809Z",
+      "createdBy": "sasdemo",
+      "modifiedBy": "sasdemo",
+      "id": "hmeq-rev-0002",
+      "name": "HMEQ Credit Decision",
+      "description": "Added fraud model step",
+      "majorRevision": 1,
+      "minorRevision": 1,
+      "nodeCount": 3,
+      "checkout": false,
+      "workflowDefinitionId": "wf-hmeq-0001",
+      "links": [
+        {
+          "method": "GET",
+          "rel": "self",
+          "href": "/decisions/flows/hmeq-credit-decision/revisions/hmeq-rev-0002",
+          "type": "application/vnd.sas.decision"
+        },
+        {
+          "method": "GET",
+          "rel": "decision",
+          "href": "/decisions/flows/hmeq-credit-decision",
+          "type": "application/vnd.sas.decision"
+        }
+      ],
+      "version": 17
+    },
+    {
+      "creationTimeStamp": "2026-06-24T01:58:36.651Z",
+      "modifiedTimeStamp": "2026-06-24T01:58:36.651Z",
+      "createdBy": "sasdemo",
+      "modifiedBy": "sasdemo",
+      "id": "hmeq-rev-0001",
+      "name": "HMEQ Credit Decision",
+      "majorRevision": 1,
+      "minorRevision": 0,
+      "nodeCount": 2,
+      "checkout": false,
+      "workflowDefinitionId": "wf-hmeq-0001",
+      "links": [
+        {
+          "method": "GET",
+          "rel": "self",
+          "href": "/decisions/flows/hmeq-credit-decision/revisions/hmeq-rev-0001",
+          "type": "application/vnd.sas.decision"
+        }
+      ],
+      "version": 17
+    }
+  ],
+  "links": [
+    {
+      "method": "GET",
+      "rel": "self",
+      "href": "/decisions/flows/hmeq-credit-decision/revisions?start=0&limit=100",
+      "type": "application/vnd.sas.collection"
+    }
+  ],
+  "version": 2
+}

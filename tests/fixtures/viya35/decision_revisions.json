@@ -1,0 +1,63 @@
+{
+  "name": "revisions",
+  "accept": "application/vnd.sas.summary",
+  "start": 0,
+  "count": 2,
+  "limit": 100,
+  "items": [
+    {
+      "creationTimeStamp": "2022-06-09T11:27:11Z",
+      "modifiedTimeStamp": "2022-08-01T09:00:00Z",
+      "createdBy": "seford",
+      "modifiedBy": "seford",
+      "id": "legacy-rev-0002",
+      "name": "Legacy Credit Decision",
+      "description": "Tuned scoring cutoffs",
+      "majorRevision": 2,
+      "minorRevision": 0,
+      "nodeCount": 2,
+      "checkout": false,
+      "workflowDefinitionId": "wf-legacy-0001",
+      "links": [
+        {
+          "method": "GET",
+          "rel": "self",
+          "href": "/decisions/flows/def-456-decision/revisions/legacy-rev-0002",
+          "type": "application/vnd.sas.decision"
+        }
+      ],
+      "version": 9
+    },
+    {
+      "creationTimeStamp": "2022-06-09T11:27:11Z",
+      "modifiedTimeStamp": "2022-06-09T11:27:11Z",
+      "createdBy": "seford",
+      "modifiedBy": "seford",
+      "id": "legacy-rev-0001",
+      "name": "Legacy Credit Decision",
+      "majorRevision": 1,
+      "minorRevision": 0,
+      "nodeCount": 2,
+      "checkout": false,
+      "workflowDefinitionId": "wf-legacy-0001",
+      "links": [
+        {
+          "method": "GET",
+          "rel": "self",
+          "href": "/decisions/flows/def-456-decision/revisions/legacy-rev-0001",
+          "type": "application/vnd.sas.decision"
+        }
+      ],
+      "version": 9
+    }
+  ],
+  "links": [
+    {
+      "method": "GET",
+      "rel": "self",
+      "href": "/decisions/flows/def-456-decision/revisions?start=0&limit=100",
+      "type": "application/vnd.sas.collection"
+    }
+  ],
+  "version": 2
+}

@@ -27,6 +27,25 @@ endpoints:
     response_fields: [items]
     item_fields: [id, name, description, type, createdBy, modifiedBy, creationTimeStamp, modifiedTimeStamp]
 
+  - id: list_decision_revisions
+    method: GET
+    path: /decisions/flows/{decision_id}/revisions
+    accept: application/vnd.sas.collection+json
+    # Collection-wrapper field the pagination iterator reads.
+    response_fields: [items]
+    # Each item is a lightweight revision summary; these are the fields the
+    # client reads off it. `checkout` is the checked-out/lock indicator.
+    item_fields: [id, majorRevision, minorRevision, description, nodeCount, checkout, workflowDefinitionId, createdBy, modifiedBy, creationTimeStamp, modifiedTimeStamp]
+
+  - id: get_decision_revision
+    method: GET
+    path: /decisions/flows/{decision_id}/revisions/{revision_id}
+    # A full decision AT the given revision — same shape as get_decision_content
+    # (has flow.steps), with revision metadata (majorRevision/minorRevision/
+    # checkout) additionally present. Parsed by the same parse_decision.
+    accept: application/vnd.sas.decision+json
+    response_fields: [name, flow.steps, majorRevision, minorRevision, checkout]
+
   - id: execute_mas_step
     method: POST
     path: /microanalyticScore/modules/{module_id}/steps/{step_id}

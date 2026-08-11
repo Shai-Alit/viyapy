@@ -1,0 +1,28 @@
+{
+  "id": "legacy-rev-0002",
+  "decisionId": "def-456-decision",
+  "name": "Legacy Credit Decision",
+  "majorRevision": 2,
+  "minorRevision": 0,
+  "checkout": false,
+  "nodeCount": 2,
+  "flow": {
+    "steps": [
+      {
+        "type": "application/vnd.sas.decision.step.model",
+        "model": { "name": "Legacy Scoring Model" },
+        "modifiedBy": "seford",
+        "modifiedTimeStamp": "2022-06-09T11:27:11Z"
+      },
+      {
+        "type": "application/vnd.sas.decision.step.ruleset",
+        "ruleSet": { "name": "Legacy Rules" }
+      }
+    ]
+  },
+  "creationTimeStamp": "2022-06-09T11:27:11Z",
+  "modifiedTimeStamp": "2022-08-01T09:00:00Z",
+  "createdBy": "seford",
+  "modifiedBy": "seford",
+  "version": 9
+}

@@ -44,6 +44,7 @@ def test_model_names_are_exported() -> None:
         "ModelStep",
         "ExecutionResult",
         "MasModule",
+        "Revision",
         "StepSignature",
         "ValidationResult",
         "Variable",

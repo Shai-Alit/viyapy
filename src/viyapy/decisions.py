@@ -2,17 +2,26 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterator
+from collections.abc import Iterator, Mapping
+from typing import Any
 
 from ._http import HttpClient
 from ._pagination import DEFAULT_PAGE_SIZE, iter_collection
+from ._revisions import RevisionsMixin
 from ._validation import require_identifier, require_positive_int
 from .dialects.base import Dialect
 from .models import Decision, DecisionSummary, ModelStep
 
 
-class DecisionsAPI:
-    """Decision-flow operations, accessed via ``ViyaClient.decisions``."""
+class DecisionsAPI(RevisionsMixin[Decision]):
+    """Decision-flow operations, accessed via ``ViyaClient.decisions``.
+
+    Beyond :meth:`list`/:meth:`get`, this exposes a decision flow's revision
+    history via :meth:`revisions` and :meth:`get_revision` (inherited from
+    :class:`~viyapy._revisions.RevisionsMixin`). A plain :meth:`get` returns the
+    *current* revision; :meth:`get_revision` returns the flow's content at a
+    specific historical revision — both as a :class:`~viyapy.models.Decision`.
+    """
 
     def __init__(self, http: HttpClient, dialect: Dialect) -> None:
         self._http = http
@@ -87,3 +96,19 @@ class DecisionsAPI:
         :class:`Decision` if you need the flow and its models together.
         """
         return self.get(decision_id).models
+
+    # -- revision/lock hooks (see RevisionsMixin) ---------------------------
+
+    def _revisions_path(self, resource_id: str) -> str:
+        return self._dialect.decision_revisions_path(resource_id)
+
+    def _revision_path(self, resource_id: str, revision_id: str) -> str:
+        return self._dialect.decision_revision_path(resource_id, revision_id)
+
+    def _revision_media_type(self) -> str:
+        return self._dialect.decision_media_type
+
+    def _parse_revision_full(self, revision_id: str, raw: Mapping[str, Any]) -> Decision:
+        # A full-revision payload is a decision at that revision — its own `id`
+        # is the revision id, which parse_decision records as Decision.id.
+        return self._dialect.parse_decision(revision_id, raw)

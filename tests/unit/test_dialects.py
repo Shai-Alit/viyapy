@@ -141,6 +141,84 @@ def test_parse_decision_summary_without_usable_id_raises(bad: dict[str, object])
         Viya4Dialect().parse_decision_summary(bad)
 
 
+# -- revision parsing / paths -----------------------------------------------
+
+
+@pytest.mark.parametrize("dialect", [Viya4Dialect(), Viya35Dialect()])
+def test_decision_revision_paths_are_shared(dialect: object) -> None:
+    assert dialect.decision_revisions_path("d1") == "/decisions/flows/d1/revisions"  # type: ignore[attr-defined]
+    assert (
+        dialect.decision_revision_path("d1", "r2")  # type: ignore[attr-defined]
+        == "/decisions/flows/d1/revisions/r2"
+    )
+
+
+def test_decision_revision_paths_percent_encode() -> None:
+    dialect = Viya4Dialect()
+    assert dialect.decision_revisions_path("a/b") == "/decisions/flows/a%2Fb/revisions"
+    assert dialect.decision_revision_path("a/b", "c?d") == "/decisions/flows/a%2Fb/revisions/c%3Fd"
+
+
+@pytest.mark.parametrize("dialect", [Viya4Dialect(), Viya35Dialect()])
+def test_parse_revision_reads_core_fields(dialect: object) -> None:
+    revision = dialect.parse_revision(  # type: ignore[attr-defined]
+        {
+            "id": "rev-2",
+            "majorRevision": 1,
+            "minorRevision": 3,
+            "description": "tuned cutoffs",
+            "nodeCount": 4,
+            "checkout": True,
+            "workflowDefinitionId": "wf-1",
+            "createdBy": "sasdemo",
+            "modifiedBy": "analyst",
+            "creationTimeStamp": "2026-06-24T01:58:36.651Z",
+            "modifiedTimeStamp": "2026-06-24T02:23:05.809Z",
+        }
+    )
+    assert revision.id == "rev-2"
+    assert revision.major_revision == 1
+    assert revision.minor_revision == 3
+    assert revision.description == "tuned cutoffs"
+    assert revision.node_count == 4
+    assert revision.checkout is True
+    assert revision.workflow_definition_id == "wf-1"
+    assert revision.label == "1.3"
+
+
+def test_parse_revision_tolerates_sparse_item() -> None:
+    # Only an id is guaranteed; other fields degrade to None, and a bool-y int
+    # must not be mistaken for a revision number.
+    revision = Viya4Dialect().parse_revision({"id": "r1"})
+    assert revision.id == "r1"
+    assert revision.major_revision is None
+    assert revision.checkout is None
+    assert revision.label is None
+
+
+@pytest.mark.parametrize("bad", [{}, {"id": ""}, {"id": "   "}, {"id": 42}, {"majorRevision": 1}])
+def test_parse_revision_without_usable_id_raises(bad: dict[str, object]) -> None:
+    with pytest.raises(ViyaResponseError):
+        Viya4Dialect().parse_revision(bad)
+
+
+def test_parse_decision_surfaces_revision_metadata(
+    load_fixture: Callable[[str, str], Any],
+) -> None:
+    raw = load_fixture("viya4", "decision_revision.json")
+    decision = Viya4Dialect().parse_decision("hmeq-rev-0002", raw)
+    assert decision.major_revision == 1
+    assert decision.minor_revision == 1
+    assert decision.checkout is False
+
+
+def test_parse_decision_revision_metadata_absent_is_none() -> None:
+    decision = Viya4Dialect().parse_decision("d1", {"name": "n", "flow": {"steps": []}})
+    assert decision.major_revision is None
+    assert decision.minor_revision is None
+    assert decision.checkout is None
+
+
 # -- execution parsing / the output vs outputs matrix -----------------------
 
 

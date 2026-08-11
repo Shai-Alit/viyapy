@@ -52,3 +52,24 @@ def test_mas_execute_across_generations(
     assert isinstance(result.outputs, dict)
     assert result.outputs
     assert result.raw == raw
+
+
+@responses.activate
+def test_decision_revisions_across_generations(
+    generation: str,
+    version_for: Callable[[str], str],
+    load_fixture: Callable[[str, str], Any],
+) -> None:
+    listing = load_fixture(generation, "decision_revisions.json")
+    full = load_fixture(generation, "decision_revision.json")
+    responses.add(responses.GET, f"{BASE}/decisions/flows/d1/revisions", json=listing, status=200)
+    responses.add(responses.GET, f"{BASE}/decisions/flows/d1/revisions/rev", json=full, status=200)
+
+    client = ViyaClient(BASE, TOKEN, viya_version=version_for(generation), max_retries=0)
+
+    revisions = list(client.decisions.revisions("d1"))
+    assert revisions and all(r.id for r in revisions)
+
+    decision = client.decisions.get_revision("d1", "rev")
+    assert decision.major_revision is not None
+    assert decision.raw == full
