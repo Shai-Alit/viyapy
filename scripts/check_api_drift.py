@@ -60,6 +60,8 @@ REQUIRED_ENDPOINTS = (
     "get_decision_revision",
     "get_decision_code",
     "get_decision_revision_code",
+    "get_decision_external_artifacts",
+    "get_decision_revision_external_artifacts",
     "execute_mas_step",
     "list_mas_modules",
     "get_mas_module",
@@ -298,6 +300,78 @@ def _check_generation(name: str, entry: dict[str, Any], problems: list[str]) -> 
             problems.append(
                 f"{tag} contract declares get_decision_revision_code but "
                 "DecisionsAPI.get_revision_code is missing"
+            )
+
+    # -- decision external artifacts: flow + revision paths, media, parse -----
+    arts = endpoints.get("get_decision_external_artifacts")
+    if arts:
+        expected = arts["path"].replace("{decision_id}", _ID)
+        actual = dialect.decision_external_artifacts_path(_ID)
+        if actual != expected:
+            problems.append(
+                f"{tag} decision_external_artifacts_path: code {actual!r} != contract {expected!r}"
+            )
+        if dialect.decision_external_artifacts_media_type != arts["accept"]:
+            problems.append(
+                f"{tag} decision external artifacts Accept: code "
+                f"{dialect.decision_external_artifacts_media_type!r} != contract {arts['accept']!r}"
+            )
+        if not hasattr(DecisionsAPI, "external_artifacts"):
+            problems.append(
+                f"{tag} contract declares get_decision_external_artifacts but "
+                "DecisionsAPI.external_artifacts is missing"
+            )
+        # Round-trip the recorded fixture through the artifact parser and assert
+        # every declared item field is actually surfaced.
+        arts_fixture = FIXTURES_DIR / name / "decision_external_artifacts.json"
+        if arts_fixture.exists():
+            page = _load_json(arts_fixture)
+            items = page.get("items") if isinstance(page, dict) else None
+            if not isinstance(items, list) or not items:
+                problems.append(
+                    f"{tag} decision_external_artifacts.json fixture has no items to parse"
+                )
+            else:
+                artifact = dialect.parse_external_artifact(items[0])
+                field_attr = {
+                    "name": artifact.name,
+                    "artifactType": artifact.artifact_type,
+                    "parentURI": artifact.parent_uri,
+                    "artifactProperties": artifact.properties,
+                }
+                for wire_field in arts.get("item_fields", []):
+                    if wire_field not in field_attr:
+                        problems.append(
+                            f"{tag} get_decision_external_artifacts item_field {wire_field!r} is "
+                            "declared but the checker has no mapping for it (add it to field_attr)"
+                        )
+                    elif items[0].get(wire_field) is not None and not field_attr[wire_field]:
+                        problems.append(
+                            f"{tag} ExternalArtifact drops item field {wire_field!r}: present in "
+                            "the fixture but not surfaced by parse_external_artifact"
+                        )
+        else:
+            problems.append(f"{tag} missing fixture: {arts_fixture.relative_to(REPO_ROOT)}")
+
+    rev_arts = endpoints.get("get_decision_revision_external_artifacts")
+    if rev_arts:
+        expected = rev_arts["path"].replace("{decision_id}", _ID).replace("{revision_id}", _REV)
+        actual = dialect.decision_revision_external_artifacts_path(_ID, _REV)
+        if actual != expected:
+            problems.append(
+                f"{tag} decision_revision_external_artifacts_path: "
+                f"code {actual!r} != contract {expected!r}"
+            )
+        if dialect.decision_external_artifacts_media_type != rev_arts["accept"]:
+            problems.append(
+                f"{tag} decision revision external artifacts Accept: code "
+                f"{dialect.decision_external_artifacts_media_type!r} "
+                f"!= contract {rev_arts['accept']!r}"
+            )
+        if not hasattr(DecisionsAPI, "revision_external_artifacts"):
+            problems.append(
+                f"{tag} contract declares get_decision_revision_external_artifacts but "
+                "DecisionsAPI.revision_external_artifacts is missing"
             )
 
     # -- MAS execute endpoint: path, request body, output shape -------------

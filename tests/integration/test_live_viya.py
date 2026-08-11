@@ -23,6 +23,7 @@ from viyapy import (
     Decision,
     DecisionSummary,
     ExecutionResult,
+    ExternalArtifact,
     MasModule,
     ModuleSource,
     Revision,
@@ -107,6 +108,30 @@ def _check_decision_code(client: ViyaClient, decision_id: str) -> None:
         revision_code = client.decisions.get_revision_code(decision_id, revision.id)
         assert isinstance(revision_code, str)
         assert revision_code.strip()
+        break  # one revision is enough to assert the shape
+
+
+def _check_decision_external_artifacts(client: ViyaClient, decision_id: str) -> None:
+    # Read-only: fetch the flow's external artifacts (current revision) and
+    # confirm the collection comes back as a tuple of well-formed artifacts.
+    # A flow may legitimately reference none, so an empty tuple is acceptable.
+    # Then, if the flow has a revision history, fetch the newest revision's
+    # artifacts the same way. Bounded to the first revision only.
+    artifacts = client.decisions.external_artifacts(decision_id)
+    assert isinstance(artifacts, tuple)
+    for artifact in artifacts:
+        assert isinstance(artifact, ExternalArtifact)
+        assert isinstance(artifact.name, str)
+        assert artifact.name
+        assert isinstance(artifact.properties, dict)
+        assert isinstance(artifact.raw, dict)
+
+    for revision in client.decisions.revisions(decision_id):
+        rev_artifacts = client.decisions.revision_external_artifacts(decision_id, revision.id)
+        assert isinstance(rev_artifacts, tuple)
+        for artifact in rev_artifacts:
+            assert isinstance(artifact, ExternalArtifact)
+            assert artifact.name
         break  # one revision is enough to assert the shape
 
 
@@ -261,6 +286,13 @@ def _run(prefix: str, version: str, kind: str) -> None:
         with ViyaClient(env["host"], env["token"], viya_version=version) as client:  # type: ignore[arg-type]
             _check_decision_code(client, env["decision"])
         return
+    if kind == "decision_artifacts":
+        # Read-only: fetches a flow's external artifacts (current + one revision).
+        if not env["decision"]:
+            pytest.skip(f"{prefix}_DECISION not set")
+        with ViyaClient(env["host"], env["token"], viya_version=version) as client:  # type: ignore[arg-type]
+            _check_decision_external_artifacts(client, env["decision"])
+        return
     if kind == "crud":
         # The CRUD lifecycle creates and deletes a module, so it's gated behind a
         # separate explicit opt-in to avoid mutating a deployment by surprise.
@@ -309,6 +341,10 @@ def test_viya4_decision_code() -> None:
     _run("VIYAPY_TEST_4", "4", "decision_code")
 
 
+def test_viya4_decision_external_artifacts() -> None:
+    _run("VIYAPY_TEST_4", "4", "decision_artifacts")
+
+
 def test_viya4_mas_execute() -> None:
     _run("VIYAPY_TEST_4", "4", "mas")
 
@@ -350,6 +386,10 @@ def test_viya35_decision_revisions() -> None:
 
 def test_viya35_decision_code() -> None:
     _run("VIYAPY_TEST_35", "3.5", "decision_code")
+
+
+def test_viya35_decision_external_artifacts() -> None:
+    _run("VIYAPY_TEST_35", "3.5", "decision_artifacts")
 
 
 def test_viya35_mas_execute() -> None:

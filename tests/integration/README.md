@@ -49,6 +49,14 @@ Per generation there are several tests, all driven by the variables above:
   a non-empty string, then fetches the code at one revision
   (`client.decisions.get_revision_code(...)`) and asserts the same. Tolerates a flow
   with no separate revision history (it stops after the first revision).
+- **decision external artifacts** (`<PREFIX>_DECISION`) — read-only: fetches the
+  flow's external artifacts for the current revision
+  (`client.decisions.external_artifacts(...)`) and asserts each parses into an
+  `ExternalArtifact` with a usable name, then fetches the artifacts at one revision
+  (`client.decisions.revision_external_artifacts(...)`) and asserts the same. This
+  endpoint is not paginated, so both calls return the full tuple in one response.
+  Tolerates a flow that references no external artifacts (an empty tuple) and one
+  with no separate revision history (it stops after the first revision).
 - **mas execute** (`<PREFIX>_MODULE`, `<PREFIX>_INPUTS`) — executes the module
   step and checks the outputs parse.
 - **mas validate** (`<PREFIX>_MODULE`, `<PREFIX>_INPUTS`) — POSTs the inputs to the

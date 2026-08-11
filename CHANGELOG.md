@@ -9,6 +9,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Reading a decision flow's external artifacts on `client.decisions`.
+  `external_artifacts(flow_id)` returns the resources a flow depends on outside
+  the flow itself — most commonly the analytic store backing a model step — for
+  its current revision (`GET /decisions/flows/{id}/externalArtifacts`), and
+  `revision_external_artifacts(flow_id, revision_id)` returns them *at* a
+  specific revision. Unlike the other decision collections this endpoint is
+  **not** paginated — the server returns every artifact in one response — so both
+  methods eagerly return a full `tuple` of the new `ExternalArtifact` (its
+  `name`, `artifact_type`, `parent_uri`, a type-dependent `properties` dict, and
+  the raw payload), exported from the package root. Wire shapes were confirmed
+  against a live Viya 4 instance; pinned in both generation contracts and covered
+  by unit and opt-in live integration tests.
 - Reading a decision flow's generated code on `client.decisions`.
   `get_code(flow_id)` returns the flow's server-generated SAS **DS2** source for
   its current revision as raw text (`GET /decisions/flows/{id}/code`,

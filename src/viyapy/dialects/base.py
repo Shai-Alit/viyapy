@@ -21,6 +21,7 @@ from ..models import (
     Decision,
     DecisionSummary,
     ExecutionResult,
+    ExternalArtifact,
     MasModule,
     ModelStep,
     ModuleSource,
@@ -89,6 +90,9 @@ class Dialect:
     name: str
     decision_media_type: str = "application/vnd.sas.decision+json"
     decision_code_media_type: str = "text/vnd.sas.source.ds2"
+    # A flow's external-artifacts endpoint is a (non-paginated) collection, so
+    # it is read with the standard collection Accept.
+    decision_external_artifacts_media_type: str = "application/vnd.sas.collection+json"
     mas_module_media_type: str = MAS_MODULE_MEDIA_TYPE
     mas_module_definition_media_type: str = MAS_MODULE_DEFINITION_MEDIA_TYPE
     mas_module_source_media_type: str = MAS_MODULE_SOURCE_MEDIA_TYPE
@@ -147,6 +151,27 @@ class Dialect:
         return (
             f"/decisions/flows/{quote(decision_id, safe='')}"
             f"/revisions/{quote(revision_id, safe='')}/code"
+        )
+
+    def decision_external_artifacts_path(self, decision_id: str) -> str:
+        """Return the relative path for a decision flow's external artifacts.
+
+        A ``GET`` (Accept ``application/vnd.sas.collection+json``) returns every
+        external artifact the flow references (analytic stores, etc.) in one
+        response — the collection is not paginated. The id is percent-encoded for
+        the same reason as :meth:`decision_path`.
+        """
+        return f"/decisions/flows/{quote(decision_id, safe='')}/externalArtifacts"
+
+    def decision_revision_external_artifacts_path(self, decision_id: str, revision_id: str) -> str:
+        """Return the relative path for one flow revision's external artifacts.
+
+        As :meth:`decision_external_artifacts_path`, but scoped to a specific
+        revision. Both segments are percent-encoded.
+        """
+        return (
+            f"/decisions/flows/{quote(decision_id, safe='')}"
+            f"/revisions/{quote(revision_id, safe='')}/externalArtifacts"
         )
 
     def mas_modules_path(self) -> str:
@@ -393,6 +418,34 @@ class Dialect:
             modified_by=_str_or_none(raw.get("modifiedBy")),
             creation_timestamp=_str_or_none(raw.get("creationTimeStamp")),
             modified_timestamp=_str_or_none(raw.get("modifiedTimeStamp")),
+            raw=dict(raw),
+        )
+
+    def parse_external_artifact(self, raw: Mapping[str, Any]) -> ExternalArtifact:
+        """Build an :class:`ExternalArtifact` from one ``externalArtifacts`` item.
+
+        Each item names a resource the flow depends on (typically an analytic
+        store) with a type-dependent ``artifactProperties`` map, kept verbatim on
+        :attr:`ExternalArtifact.properties`. The full payload is retained on
+        :attr:`ExternalArtifact.raw`.
+
+        Raises:
+            ViyaResponseError: The payload has no usable string ``name`` — without
+                it the artifact would have a false identity, so a malformed
+                response fails loudly here.
+        """
+        name = raw.get("name")
+        if not isinstance(name, str) or not name.strip():
+            raise ViyaResponseError(
+                "external artifact payload has no usable 'name' field",
+                response_body=dict(raw),
+            )
+        properties = raw.get("artifactProperties")
+        return ExternalArtifact(
+            name=name.strip(),
+            artifact_type=_str_or_none(raw.get("artifactType")),
+            parent_uri=_str_or_none(raw.get("parentURI")),
+            properties=dict(properties) if isinstance(properties, Mapping) else {},
             raw=dict(raw),
         )
 

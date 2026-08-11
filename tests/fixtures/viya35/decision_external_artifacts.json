@@ -1,0 +1,50 @@
+{
+  "name": "external-artifacts",
+  "accept": "application/vnd.sas.decision.external.artifact",
+  "count": 2,
+  "items": [
+    {
+      "name": "HMEQ_CREDIT_ASTORE",
+      "artifactType": "analyticStore",
+      "parentURI": "/modelRepository/models/00000000-0000-0000-0000-000000000001",
+      "artifactProperties": {
+        "astoreName": "HMEQ_CREDIT_ASTORE",
+        "astoreKey": "0000000000000000000000000000000000000001",
+        "astoreURI": "/dataTables/dataSources/cas~fs~cas-shared-default~fs~ModelStore/tables/HMEQ_CREDIT_ASTORE",
+        "astoreFileLocation": "file:///models/astores/viya/HMEQ_CREDIT_ASTORE.astore"
+      }
+    },
+    {
+      "name": "HMEQ_FRAUD_ASTORE",
+      "artifactType": "analyticStore",
+      "parentURI": "/modelRepository/models/00000000-0000-0000-0000-000000000002",
+      "artifactProperties": {
+        "astoreName": "HMEQ_FRAUD_ASTORE",
+        "astoreKey": "0000000000000000000000000000000000000002",
+        "astoreURI": "/dataTables/dataSources/cas~fs~cas-shared-default~fs~ModelStore/tables/HMEQ_FRAUD_ASTORE",
+        "astoreFileLocation": "file:///models/astores/viya/HMEQ_FRAUD_ASTORE.astore"
+      }
+    }
+  ],
+  "links": [
+    {
+      "method": "GET",
+      "rel": "collection",
+      "href": "/decisions/flows/hmeq-credit-decision/externalArtifacts",
+      "type": "application/vnd.sas.collection"
+    },
+    {
+      "method": "GET",
+      "rel": "self",
+      "href": "/decisions/flows/hmeq-credit-decision/externalArtifacts",
+      "type": "application/vnd.sas.collection"
+    },
+    {
+      "method": "GET",
+      "rel": "up",
+      "href": "/decisions/flows/hmeq-credit-decision",
+      "type": "application/vnd.sas.decision"
+    }
+  ],
+  "version": 2
+}
