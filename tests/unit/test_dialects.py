@@ -180,6 +180,73 @@ def test_decision_code_paths_percent_encode() -> None:
 
 
 @pytest.mark.parametrize("dialect", [Viya4Dialect(), Viya35Dialect()])
+def test_decision_external_artifacts_paths_are_shared(dialect: object) -> None:
+    assert (
+        dialect.decision_external_artifacts_path("d1")  # type: ignore[attr-defined]
+        == "/decisions/flows/d1/externalArtifacts"
+    )
+    assert (
+        dialect.decision_revision_external_artifacts_path("d1", "r2")  # type: ignore[attr-defined]
+        == "/decisions/flows/d1/revisions/r2/externalArtifacts"
+    )
+    # The collection is read with the standard collection Accept.
+    assert (
+        dialect.decision_external_artifacts_media_type  # type: ignore[attr-defined]
+        == "application/vnd.sas.collection+json"
+    )
+
+
+def test_decision_external_artifacts_paths_percent_encode() -> None:
+    dialect = Viya4Dialect()
+    assert (
+        dialect.decision_external_artifacts_path("a/b")
+        == "/decisions/flows/a%2Fb/externalArtifacts"
+    )
+    assert (
+        dialect.decision_revision_external_artifacts_path("a/b", "c?d")
+        == "/decisions/flows/a%2Fb/revisions/c%3Fd/externalArtifacts"
+    )
+
+
+@pytest.mark.parametrize("dialect", [Viya4Dialect(), Viya35Dialect()])
+def test_parse_external_artifact_reads_core_fields(dialect: object) -> None:
+    artifact = dialect.parse_external_artifact(  # type: ignore[attr-defined]
+        {
+            "name": "  HMEQ_CREDIT_ASTORE  ",
+            "artifactType": "analyticStore",
+            "parentURI": "/modelRepository/models/abc",
+            "artifactProperties": {"astoreName": "HMEQ_CREDIT_ASTORE", "astoreKey": "k1"},
+        }
+    )
+    assert artifact.name == "HMEQ_CREDIT_ASTORE"
+    assert artifact.artifact_type == "analyticStore"
+    assert artifact.parent_uri == "/modelRepository/models/abc"
+    assert artifact.properties == {"astoreName": "HMEQ_CREDIT_ASTORE", "astoreKey": "k1"}
+
+
+def test_parse_external_artifact_tolerates_sparse_item() -> None:
+    # Only a name is guaranteed; type/uri degrade to None and properties to {}.
+    artifact = Viya4Dialect().parse_external_artifact({"name": "bare"})
+    assert artifact.name == "bare"
+    assert artifact.artifact_type is None
+    assert artifact.parent_uri is None
+    assert artifact.properties == {}
+
+
+def test_parse_external_artifact_non_mapping_properties_degrade_to_empty() -> None:
+    artifact = Viya4Dialect().parse_external_artifact(
+        {"name": "x", "artifactProperties": ["not", "a", "map"]}
+    )
+    assert artifact.properties == {}
+
+
+@pytest.mark.parametrize("bad", [{}, {"name": ""}, {"name": "   "}, {"name": 42}])
+def test_parse_external_artifact_without_usable_name_raises(bad: dict[str, object]) -> None:
+    with pytest.raises(ViyaResponseError):
+        Viya4Dialect().parse_external_artifact(bad)
+
+
+@pytest.mark.parametrize("dialect", [Viya4Dialect(), Viya35Dialect()])
 def test_parse_revision_reads_core_fields(dialect: object) -> None:
     revision = dialect.parse_revision(  # type: ignore[attr-defined]
         {

@@ -92,3 +92,31 @@ def test_decision_code_across_generations(
     # Both generations return the generated DS2 as raw text, verbatim.
     assert client.decisions.get_code("d1") == code
     assert client.decisions.get_revision_code("d1", "rev") == code
+
+
+@responses.activate
+def test_decision_external_artifacts_across_generations(
+    generation: str,
+    version_for: Callable[[str], str],
+    load_fixture: Callable[[str, str], Any],
+) -> None:
+    raw = load_fixture(generation, "decision_external_artifacts.json")
+    responses.add(
+        responses.GET, f"{BASE}/decisions/flows/d1/externalArtifacts", json=raw, status=200
+    )
+    responses.add(
+        responses.GET,
+        f"{BASE}/decisions/flows/d1/revisions/rev/externalArtifacts",
+        json=raw,
+        status=200,
+    )
+
+    client = ViyaClient(BASE, TOKEN, viya_version=version_for(generation), max_retries=0)
+
+    # Both generations parse the non-paginated collection to a full tuple.
+    arts = client.decisions.external_artifacts("d1")
+    assert isinstance(arts, tuple)
+    assert arts and all(a.name for a in arts)
+
+    rev_arts = client.decisions.revision_external_artifacts("d1", "rev")
+    assert [a.name for a in rev_arts] == [a.name for a in arts]

@@ -10,7 +10,7 @@ from ._pagination import DEFAULT_PAGE_SIZE, iter_collection
 from ._revisions import RevisionsMixin
 from ._validation import require_identifier, require_positive_int
 from .dialects.base import Dialect
-from .models import Decision, DecisionSummary, ModelStep
+from .models import Decision, DecisionSummary, ExternalArtifact, ModelStep
 
 
 class DecisionsAPI(RevisionsMixin[Decision]):
@@ -148,6 +148,74 @@ class DecisionsAPI(RevisionsMixin[Decision]):
             "GET",
             self._dialect.decision_revision_code_path(decision_id, revision_id),
             accept=self._dialect.decision_code_media_type,
+        )
+
+    def external_artifacts(self, decision_id: str) -> tuple[ExternalArtifact, ...]:
+        """Return the external artifacts a decision flow depends on (current revision).
+
+        A decision flow can reference resources outside the flow itself — most
+        commonly the analytic store backing a model step. Unlike :meth:`list` and
+        :meth:`revisions`, this endpoint is **not** paginated: the server returns
+        every artifact in one response, so this eagerly returns the full tuple
+        rather than a lazy iterator.
+
+        Args:
+            decision_id: The decision id.
+
+        Returns:
+            A tuple of :class:`ExternalArtifact`, in server order (empty if the
+            flow references none).
+
+        Raises:
+            ViyaConfigError: ``decision_id`` is empty or not a string.
+            ViyaNotFoundError: No decision with that id exists.
+            ViyaError: On any other failure.
+        """
+        decision_id = require_identifier(decision_id, "decision_id")
+        return self._fetch_external_artifacts(
+            self._dialect.decision_external_artifacts_path(decision_id)
+        )
+
+    def revision_external_artifacts(
+        self, decision_id: str, revision_id: str
+    ) -> tuple[ExternalArtifact, ...]:
+        """Return the external artifacts of a flow *at a given revision*.
+
+        Like :meth:`external_artifacts`, but for a specific historical revision
+        (see :meth:`revisions` for the ids).
+
+        Args:
+            decision_id: The decision id (the flow).
+            revision_id: The revision id, e.g. from :meth:`revisions`.
+
+        Returns:
+            A tuple of :class:`ExternalArtifact`, in server order.
+
+        Raises:
+            ViyaConfigError: Either id is empty or not a string.
+            ViyaNotFoundError: No such decision or revision exists.
+            ViyaError: On any other failure.
+        """
+        decision_id = require_identifier(decision_id, "decision_id")
+        revision_id = require_identifier(revision_id, "revision_id")
+        return self._fetch_external_artifacts(
+            self._dialect.decision_revision_external_artifacts_path(decision_id, revision_id)
+        )
+
+    def _fetch_external_artifacts(self, path: str) -> tuple[ExternalArtifact, ...]:
+        """Fetch and parse a (non-paginated) external-artifacts collection."""
+        raw = self._http.request_json(
+            "GET",
+            path,
+            accept=self._dialect.decision_external_artifacts_media_type,
+        )
+        items = raw.get("items")
+        if not isinstance(items, list):
+            return ()
+        return tuple(
+            self._dialect.parse_external_artifact(item)
+            for item in items
+            if isinstance(item, Mapping)
         )
 
     # -- revision/lock hooks (see RevisionsMixin) ---------------------------

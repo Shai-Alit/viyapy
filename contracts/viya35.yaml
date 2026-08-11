@@ -57,6 +57,26 @@ endpoints:
     accept: text/vnd.sas.source.ds2
     response_media_type: text/vnd.sas.source.ds2
 
+  - id: get_decision_external_artifacts
+    method: GET
+    path: /decisions/flows/{decision_id}/externalArtifacts
+    # The external resources the flow depends on (analytic stores, etc.). A
+    # collection wrapper, but NOT paginated — every artifact is returned in one
+    # response (no rel:next link), so the client materializes the full tuple.
+    accept: application/vnd.sas.collection+json
+    response_fields: [items]
+    # Each item names an artifact with a type-dependent artifactProperties map
+    # (kept as a raw dict). These are the fields the client reads off an item.
+    item_fields: [name, artifactType, parentURI, artifactProperties]
+
+  - id: get_decision_revision_external_artifacts
+    method: GET
+    path: /decisions/flows/{decision_id}/revisions/{revision_id}/externalArtifacts
+    # Same shape, but AT a specific historical revision.
+    accept: application/vnd.sas.collection+json
+    response_fields: [items]
+    item_fields: [name, artifactType, parentURI, artifactProperties]
+
   - id: execute_mas_step
     method: POST
     path: /microanalyticScore/modules/{module_id}/steps/{step_id}

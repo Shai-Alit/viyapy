@@ -152,6 +152,45 @@ revision raises [`ViyaNotFoundError`][viyapy.ViyaNotFoundError].
     endpoint (which binds the flow to specific input/output tables) is a separate
     request and is not yet exposed by viyapy.
 
+## External artifacts
+
+A decision flow can reference resources that live **outside** the flow itself —
+most commonly the analytic store backing a model step.
+[`external_artifacts`][viyapy.decisions.DecisionsAPI.external_artifacts] returns
+those dependencies for the flow's **current** revision. Unlike `list` and
+`revisions`, this endpoint is **not** paginated — the server returns every
+artifact in one response — so it eagerly returns a `tuple` rather than a lazy
+iterator:
+
+```python
+for artifact in client.decisions.external_artifacts("my-decision-id"):
+    artifact.name           # the artifact name
+    artifact.artifact_type  # e.g. "analyticStore", if reported
+    artifact.parent_uri     # the owning resource's URI, if reported
+    artifact.properties     # a type-dependent dict (e.g. astore location keys)
+    artifact.raw            # the raw artifact payload, as a dict
+```
+
+`properties` is left as a raw dict because its shape depends on
+`artifact_type` (an `analyticStore`, for instance, carries astore name/key/URI
+and file-location keys).
+
+To get the artifacts **at** a specific historical revision, pass the flow id and
+a revision id (see [Revision history](#revision-history) for the ids) to
+[`revision_external_artifacts`][viyapy.decisions.DecisionsAPI.revision_external_artifacts]:
+
+```python
+for revision in client.decisions.revisions("my-decision-id"):
+    artifacts = client.decisions.revision_external_artifacts(
+        "my-decision-id", revision.id
+    )
+```
+
+An empty or non-string id raises
+[`ViyaConfigError`][viyapy.ViyaConfigError] before any request; a missing flow or
+revision raises [`ViyaNotFoundError`][viyapy.ViyaNotFoundError]. A flow that
+references no external artifacts yields an empty tuple.
+
 ## List just the models
 
 If you only need the models, [`list_models`][viyapy.decisions.DecisionsAPI.list_models]

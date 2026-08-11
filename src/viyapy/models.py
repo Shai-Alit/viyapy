@@ -162,6 +162,37 @@ class Revision:
 
 
 @dataclass(frozen=True)
+class ExternalArtifact:
+    """An external artifact a decision flow depends on.
+
+    A decision flow can reference resources that live outside the flow itself —
+    most commonly an analytic store (``analyticStore``) backing a model step, but
+    the shape is generic. Listed via
+    ``ViyaClient.decisions.external_artifacts(flow_id)`` (and the revision
+    variant); the endpoint returns every artifact in one response (it is not
+    paginated).
+
+    Attributes:
+        name: The artifact's name (its natural key within the flow).
+        artifact_type: The kind of artifact (e.g. ``"analyticStore"``), if
+            reported.
+        parent_uri: A URI locating the owning resource (e.g. the model the
+            astore belongs to), if reported.
+        properties: The ``artifactProperties`` map. Its keys are
+            **type-dependent** (for ``analyticStore``: ``astoreName``,
+            ``astoreKey``, ``astoreURI``, ``astoreFileLocation``), so it is kept
+            as a raw mapping rather than typed per artifact kind.
+        raw: The originating artifact payload.
+    """
+
+    name: str
+    artifact_type: str | None = None
+    parent_uri: str | None = None
+    properties: dict[str, Any] = field(default_factory=dict, repr=False)
+    raw: dict[str, Any] = field(default_factory=dict, repr=False)
+
+
+@dataclass(frozen=True)
 class MasModule:
     """A SAS Micro Analytic Score (MAS) module.
 

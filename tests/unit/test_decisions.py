@@ -8,7 +8,7 @@ from typing import Any
 import pytest
 import responses
 
-from viyapy import Decision, DecisionSummary, Revision, ViyaClient
+from viyapy import Decision, DecisionSummary, ExternalArtifact, Revision, ViyaClient
 from viyapy.exceptions import ViyaConfigError, ViyaNotFoundError, ViyaResponseError
 
 BASE = "https://viya.example.com"
@@ -422,3 +422,119 @@ def test_get_revision_code_percent_encodes_ids() -> None:
     make_client().decisions.get_revision_code("weird/id", "weird/rev")
     url = responses.calls[0].request.url
     assert "/decisions/flows/weird%2Fid/revisions/weird%2Frev/code" in url
+
+
+# -- external artifacts ---------------------------------------------------------
+
+_ARTS_URL = f"{BASE}/decisions/flows/hmeq-credit-decision/externalArtifacts"
+
+
+@responses.activate
+def test_external_artifacts_parses_collection_to_tuple(
+    load_fixture: Callable[[str, str], Any],
+) -> None:
+    raw = load_fixture("viya4", "decision_external_artifacts.json")
+    responses.add(responses.GET, _ARTS_URL, json=raw, status=200)
+
+    arts = make_client().decisions.external_artifacts("hmeq-credit-decision")
+
+    assert isinstance(arts, tuple)
+    assert all(isinstance(a, ExternalArtifact) for a in arts)
+    assert [a.name for a in arts] == ["HMEQ_CREDIT_ASTORE", "HMEQ_FRAUD_ASTORE"]
+    assert arts[0].artifact_type == "analyticStore"
+    assert arts[0].properties["astoreName"] == "HMEQ_CREDIT_ASTORE"
+    assert responses.calls[0].request.headers["Accept"] == "application/vnd.sas.collection+json"
+
+
+@responses.activate
+@pytest.mark.parametrize("bad_id", ["", "   "])
+def test_external_artifacts_blank_id_fails_fast(bad_id: str) -> None:
+    with pytest.raises(ViyaConfigError):
+        make_client().decisions.external_artifacts(bad_id)
+    assert len(responses.calls) == 0
+
+
+@responses.activate
+def test_external_artifacts_percent_encodes_id() -> None:
+    responses.add(
+        responses.GET,
+        f"{BASE}/decisions/flows/weird%2Fid/externalArtifacts",
+        json={"items": []},
+        status=200,
+    )
+    make_client().decisions.external_artifacts("weird/id")
+    assert "/decisions/flows/weird%2Fid/externalArtifacts" in responses.calls[0].request.url
+
+
+@responses.activate
+def test_external_artifacts_missing_raises_not_found() -> None:
+    responses.add(
+        responses.GET,
+        f"{BASE}/decisions/flows/nope/externalArtifacts",
+        json={"message": "no"},
+        status=404,
+    )
+    with pytest.raises(ViyaNotFoundError):
+        make_client().decisions.external_artifacts("nope")
+
+
+@responses.activate
+def test_external_artifacts_empty_items_returns_empty_tuple() -> None:
+    responses.add(responses.GET, _ARTS_URL, json={"items": []}, status=200)
+    assert make_client().decisions.external_artifacts("hmeq-credit-decision") == ()
+
+
+@responses.activate
+def test_external_artifacts_missing_items_returns_empty_tuple() -> None:
+    # A payload with no `items` key at all still yields an empty tuple, not an error.
+    responses.add(responses.GET, _ARTS_URL, json={"count": 0}, status=200)
+    assert make_client().decisions.external_artifacts("hmeq-credit-decision") == ()
+
+
+@responses.activate
+def test_external_artifacts_viya35_generation(
+    load_fixture: Callable[[str, str], Any],
+) -> None:
+    raw = load_fixture("viya35", "decision_external_artifacts.json")
+    responses.add(responses.GET, _ARTS_URL, json=raw, status=200)
+    arts = make_client("3.5").decisions.external_artifacts("hmeq-credit-decision")
+    assert [a.name for a in arts] == ["HMEQ_CREDIT_ASTORE", "HMEQ_FRAUD_ASTORE"]
+
+
+@responses.activate
+def test_revision_external_artifacts_at_revision(
+    load_fixture: Callable[[str, str], Any],
+) -> None:
+    raw = load_fixture("viya4", "decision_external_artifacts.json")
+    url = f"{BASE}/decisions/flows/hmeq-credit-decision/revisions/hmeq-rev-0002/externalArtifacts"
+    responses.add(responses.GET, url, json=raw, status=200)
+
+    arts = make_client().decisions.revision_external_artifacts(
+        "hmeq-credit-decision", "hmeq-rev-0002"
+    )
+
+    assert [a.name for a in arts] == ["HMEQ_CREDIT_ASTORE", "HMEQ_FRAUD_ASTORE"]
+    assert responses.calls[0].request.headers["Accept"] == "application/vnd.sas.collection+json"
+
+
+@responses.activate
+@pytest.mark.parametrize("bad_id", ["", "   "])
+def test_revision_external_artifacts_blank_ids_fail_fast(bad_id: str) -> None:
+    with pytest.raises(ViyaConfigError):
+        make_client().decisions.revision_external_artifacts("d1", bad_id)
+    with pytest.raises(ViyaConfigError):
+        make_client().decisions.revision_external_artifacts(bad_id, "r1")
+    assert len(responses.calls) == 0
+
+
+@responses.activate
+def test_revision_external_artifacts_percent_encodes_ids() -> None:
+    responses.add(
+        responses.GET,
+        f"{BASE}/decisions/flows/weird%2Fid/revisions/weird%2Frev/externalArtifacts",
+        json={"items": []},
+        status=200,
+    )
+    make_client().decisions.revision_external_artifacts("weird/id", "weird/rev")
+    url = responses.calls[0].request.url
+    assert "/decisions/flows/weird%2Fid/revisions/weird%2Frev/externalArtifacts" in url
