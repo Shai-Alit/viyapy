@@ -19,6 +19,7 @@ from ..models import (
     EXECUTION_TIMED_OUT,
     CompileJob,
     Decision,
+    DecisionSummary,
     ExecutionResult,
     MasModule,
     ModelStep,
@@ -95,6 +96,10 @@ class Dialect:
     def decision_path(self, decision_id: str) -> str:
         """Return the relative path for fetching a decision flow's content."""
         return f"/decisions/flows/{quote(decision_id, safe='')}"
+
+    def decisions_flows_path(self) -> str:
+        """Return the relative path for the decision-flows collection."""
+        return "/decisions/flows"
 
     def mas_modules_path(self) -> str:
         """Return the relative path for the MAS modules collection."""
@@ -245,6 +250,36 @@ class Dialect:
         return {"moduleId": module_id, "type": source_type, "source": source}
 
     # -- response parsing ---------------------------------------------------
+
+    def parse_decision_summary(self, raw: Mapping[str, Any]) -> DecisionSummary:
+        """Build a :class:`DecisionSummary` from one ``/decisions/flows`` item.
+
+        Each collection item is an ``application/vnd.sas.summary`` carrying
+        identity and audit metadata but not the flow body. The full payload is
+        retained on :attr:`DecisionSummary.raw`.
+
+        Raises:
+            ViyaResponseError: The payload has no usable string ``id`` — without
+                it the returned summary would have a false identity, so a
+                malformed response fails loudly here.
+        """
+        decision_id = raw.get("id")
+        if not isinstance(decision_id, str) or not decision_id.strip():
+            raise ViyaResponseError(
+                "decision summary payload has no usable 'id' field",
+                response_body=dict(raw),
+            )
+        return DecisionSummary(
+            id=decision_id.strip(),
+            name=_str_or_none(raw.get("name")),
+            description=_str_or_none(raw.get("description")),
+            type=_str_or_none(raw.get("type")),
+            created_by=_str_or_none(raw.get("createdBy")),
+            modified_by=_str_or_none(raw.get("modifiedBy")),
+            creation_timestamp=_str_or_none(raw.get("creationTimeStamp")),
+            modified_timestamp=_str_or_none(raw.get("modifiedTimeStamp")),
+            raw=dict(raw),
+        )
 
     def parse_decision(self, decision_id: str, raw: Mapping[str, Any]) -> Decision:
         """Build a :class:`Decision` from a decision-flow payload.

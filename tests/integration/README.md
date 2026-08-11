@@ -34,6 +34,10 @@ creates and deletes a module on the deployment.
 Per generation there are several tests, all driven by the variables above:
 
 - **decision** (`<PREFIX>_DECISION`) — `GET`s a decision flow and checks it parses.
+- **decisions list** (host/token only) — pages through the deployment's decision
+  flows (`client.decisions.list()`) and checks each item parses into a
+  `DecisionSummary` with a usable id. Read-only, needs no `<PREFIX>_DECISION`, and
+  tolerates an empty deployment (it only takes a bounded slice of the results).
 - **mas execute** (`<PREFIX>_MODULE`, `<PREFIX>_INPUTS`) — executes the module
   step and checks the outputs parse.
 - **mas validate** (`<PREFIX>_MODULE`, `<PREFIX>_INPUTS`) — POSTs the inputs to the

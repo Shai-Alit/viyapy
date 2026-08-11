@@ -62,6 +62,38 @@ class Decision:
 
 
 @dataclass(frozen=True)
+class DecisionSummary:
+    """A decision flow as it appears in the ``/decisions/flows`` collection.
+
+    This is the lightweight ``application/vnd.sas.summary`` representation
+    returned when listing flows — it carries identity and audit metadata but
+    not the flow body. Fetch the full :class:`Decision` with
+    ``ViyaClient.decisions.get(summary.id)`` when you need the steps.
+
+    Attributes:
+        id: The decision id.
+        name: The decision's name, if present.
+        description: The decision's description, if present.
+        type: The object type as reported by the server (e.g. ``"decision"``).
+        created_by: User who created the decision, if reported.
+        modified_by: User who last modified the decision, if reported.
+        creation_timestamp: Creation timestamp string, if reported.
+        modified_timestamp: Last-modified timestamp string, if reported.
+        raw: The originating summary payload.
+    """
+
+    id: str
+    name: str | None = None
+    description: str | None = None
+    type: str | None = None
+    created_by: str | None = None
+    modified_by: str | None = None
+    creation_timestamp: str | None = None
+    modified_timestamp: str | None = None
+    raw: dict[str, Any] = field(default_factory=dict, repr=False)
+
+
+@dataclass(frozen=True)
 class MasModule:
     """A SAS Micro Analytic Score (MAS) module.
 

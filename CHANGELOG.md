@@ -9,6 +9,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Listing decision flows on `client.decisions`. `list()` lazily paginates
+  `GET /decisions/flows` (following the collection's `next` links) and yields a
+  new lightweight `DecisionSummary` per flow — identity plus audit metadata
+  (`id`, `name`, `description`, `type`, `created_by`/`modified_by`,
+  `creation_timestamp`/`modified_timestamp`, and the raw payload), but not the
+  flow body; call `decisions.get(summary.id)` for the full `Decision`. `page_size`
+  (default 100) is validated eagerly, raising `ViyaConfigError` at the call site.
+  Reuses the shared pagination iterator. `DecisionSummary` is exported from the
+  package root. The collection wire shape was confirmed against a live Viya 4
+  instance; pinned in both generation contracts and covered by unit and opt-in
+  live integration tests.
 - Asynchronous MAS module compilation on `client.mas`. `create` gains a `wait`
   flag: `create(..., wait=True)` submits an async *compile job*, blocks until it
   settles, and returns the compiled `MasModule` (tuned by `poll_timeout`/

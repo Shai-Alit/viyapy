@@ -34,6 +34,7 @@ from .exceptions import (
 from .models import (
     CompileJob,
     Decision,
+    DecisionSummary,
     ExecutionResult,
     MasModule,
     ModelStep,
@@ -59,6 +60,7 @@ logging.getLogger(__name__).addHandler(_handler)
 __all__ = [
     "CompileJob",
     "Decision",
+    "DecisionSummary",
     "ExecutionResult",
     "MasModule",
     "ModelStep",

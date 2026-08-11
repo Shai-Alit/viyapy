@@ -6,7 +6,7 @@ from collections.abc import Iterator, Mapping
 from typing import Any
 
 from ._http import HttpClient
-from ._pagination import iter_collection
+from ._pagination import DEFAULT_PAGE_SIZE, iter_collection
 from ._polling import DEFAULT_POLL_INTERVAL, DEFAULT_POLL_TIMEOUT, poll_until
 from ._validation import (
     check_inputs_against_signature,
@@ -32,7 +32,6 @@ from .models import (
     ValidationResult,
 )
 
-DEFAULT_PAGE_SIZE = 100
 DEFAULT_SCOPE = "public"
 
 # Friendly ``language`` keyword -> the source-language media type MAS expects in a

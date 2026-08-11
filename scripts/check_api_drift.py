@@ -53,6 +53,7 @@ _STEP = "__STEP__"
 # missing so a deleted entry can't silently pass the gate.
 REQUIRED_ENDPOINTS = (
     "get_decision_content",
+    "list_decision_flows",
     "execute_mas_step",
     "list_mas_modules",
     "get_mas_module",
@@ -136,6 +137,49 @@ def _check_generation(name: str, entry: dict[str, Any], problems: list[str]) -> 
                 f"{tag} decision Accept: code {dialect.decision_media_type!r} "
                 f"!= contract {dec['accept']!r}"
             )
+
+    # -- decision flows list endpoint: path + summary item fields -----------
+    flows = endpoints.get("list_decision_flows")
+    if flows:
+        if dialect.decisions_flows_path() != flows["path"]:
+            problems.append(
+                f"{tag} decisions_flows_path: code {dialect.decisions_flows_path()!r} "
+                f"!= contract {flows['path']!r}"
+            )
+        # Round-trip the recorded collection fixture through the summary parser
+        # and assert every item field the contract claims is actually surfaced,
+        # so a dropped field (or a renamed wire key) fails the gate.
+        flows_fixture = FIXTURES_DIR / name / "decision_flows.json"
+        if flows_fixture.exists():
+            page = _load_json(flows_fixture)
+            items = page.get("items") if isinstance(page, dict) else None
+            if not isinstance(items, list) or not items:
+                problems.append(f"{tag} decision_flows.json fixture has no items to parse")
+            else:
+                summary = dialect.parse_decision_summary(items[0])
+                field_attr = {
+                    "id": summary.id,
+                    "name": summary.name,
+                    "description": summary.description,
+                    "type": summary.type,
+                    "createdBy": summary.created_by,
+                    "modifiedBy": summary.modified_by,
+                    "creationTimeStamp": summary.creation_timestamp,
+                    "modifiedTimeStamp": summary.modified_timestamp,
+                }
+                for wire_field in flows.get("item_fields", []):
+                    if wire_field not in field_attr:
+                        problems.append(
+                            f"{tag} list_decision_flows item_field {wire_field!r} is declared "
+                            "but the checker has no mapping for it (add it to field_attr)"
+                        )
+                    elif items[0].get(wire_field) is not None and field_attr[wire_field] is None:
+                        problems.append(
+                            f"{tag} DecisionSummary drops item field {wire_field!r}: "
+                            "present in the fixture but not surfaced by parse_decision_summary"
+                        )
+        else:
+            problems.append(f"{tag} missing fixture: {flows_fixture.relative_to(REPO_ROOT)}")
 
     # -- MAS execute endpoint: path, request body, output shape -------------
     mas = endpoints.get("execute_mas_step")
