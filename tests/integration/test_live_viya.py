@@ -94,6 +94,22 @@ def _check_decision_revisions(client: ViyaClient, decision_id: str) -> None:
         assert isinstance(at_revision.models, tuple)
 
 
+def _check_decision_code(client: ViyaClient, decision_id: str) -> None:
+    # Read-only: fetch the flow's generated DS2 code (current revision) and
+    # confirm it comes back as non-empty text. Then, if the flow has a revision
+    # history, fetch the newest revision's code the same way. Tolerates a flow
+    # with no separate revision history (bounded to the first revision only).
+    code = client.decisions.get_code(decision_id)
+    assert isinstance(code, str)
+    assert code.strip()
+
+    for revision in client.decisions.revisions(decision_id):
+        revision_code = client.decisions.get_revision_code(decision_id, revision.id)
+        assert isinstance(revision_code, str)
+        assert revision_code.strip()
+        break  # one revision is enough to assert the shape
+
+
 def _check_mas(client: ViyaClient, module_id: str, inputs_json: str | None) -> None:
     inputs = json.loads(inputs_json) if inputs_json else {}
     result = client.mas.execute(module_id, inputs)
@@ -238,6 +254,13 @@ def _run(prefix: str, version: str, kind: str) -> None:
         with ViyaClient(env["host"], env["token"], viya_version=version) as client:  # type: ignore[arg-type]
             _check_decision_revisions(client, env["decision"])
         return
+    if kind == "decision_code":
+        # Read-only: fetches a flow's generated DS2 (current + one revision).
+        if not env["decision"]:
+            pytest.skip(f"{prefix}_DECISION not set")
+        with ViyaClient(env["host"], env["token"], viya_version=version) as client:  # type: ignore[arg-type]
+            _check_decision_code(client, env["decision"])
+        return
     if kind == "crud":
         # The CRUD lifecycle creates and deletes a module, so it's gated behind a
         # separate explicit opt-in to avoid mutating a deployment by surprise.
@@ -282,6 +305,10 @@ def test_viya4_decision_revisions() -> None:
     _run("VIYAPY_TEST_4", "4", "decision_revisions")
 
 
+def test_viya4_decision_code() -> None:
+    _run("VIYAPY_TEST_4", "4", "decision_code")
+
+
 def test_viya4_mas_execute() -> None:
     _run("VIYAPY_TEST_4", "4", "mas")
 
@@ -319,6 +346,10 @@ def test_viya35_decisions_list() -> None:
 
 def test_viya35_decision_revisions() -> None:
     _run("VIYAPY_TEST_35", "3.5", "decision_revisions")
+
+
+def test_viya35_decision_code() -> None:
+    _run("VIYAPY_TEST_35", "3.5", "decision_code")
 
 
 def test_viya35_mas_execute() -> None:

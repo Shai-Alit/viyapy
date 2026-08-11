@@ -122,6 +122,36 @@ for revision in client.decisions.revisions("my-decision-id"):
 
 `page_size` behaves exactly as for `list` (default `100`, validated eagerly).
 
+## Generated code
+
+A decision flow compiles to SAS **DS2** code.
+[`get_code`][viyapy.decisions.DecisionsAPI.get_code] returns that generated
+source for the flow's **current** revision, as a plain string (raw text, not
+JSON):
+
+```python
+ds2 = client.decisions.get_code("my-decision-id")
+print(ds2)              # the generated DS2 source, verbatim
+```
+
+To get the code **at** a specific historical revision, pass the flow id and a
+revision id (see [Revision history](#revision-history) for the ids) to
+[`get_revision_code`][viyapy.decisions.DecisionsAPI.get_revision_code]:
+
+```python
+for revision in client.decisions.revisions("my-decision-id"):
+    ds2 = client.decisions.get_revision_code("my-decision-id", revision.id)
+```
+
+Both return the DS2 source verbatim. An empty or non-string id raises
+[`ViyaConfigError`][viyapy.ViyaConfigError] before any request; a missing flow or
+revision raises [`ViyaNotFoundError`][viyapy.ViyaNotFoundError].
+
+!!! note
+    This is the flow's *unmapped* generated code. The related SAS **mapped code**
+    endpoint (which binds the flow to specific input/output tables) is a separate
+    request and is not yet exposed by viyapy.
+
 ## List just the models
 
 If you only need the models, [`list_models`][viyapy.decisions.DecisionsAPI.list_models]

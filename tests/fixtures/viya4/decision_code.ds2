@@ -1,0 +1,14 @@
+ds2_options scond=WARNING;
+/* Rule Set Check Debt to Income version 1.0 generated on Mon Jan 01 00:00:00 UTC 2024 */
+
+DS2_OPTIONS LOGICALEXPR = STANDARD;
+
+package "decision_code_sample" /overwrite=yes;
+   method execute(
+      in_out double debt_to_income,
+      in_out varchar(32) decision_result
+   );
+      if debt_to_income <= 0.36 then decision_result = 'APPROVE';
+      else decision_result = 'DECLINE';
+   end;
+endpackage;

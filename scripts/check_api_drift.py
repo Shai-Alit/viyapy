@@ -37,6 +37,7 @@ FIXTURES_DIR = REPO_ROOT / "tests" / "fixtures"
 # Import the package from the source tree without requiring an install.
 sys.path.insert(0, str(REPO_ROOT / "src"))
 import viyapy.dialects as dialects  # noqa: E402  (path set up above)
+from viyapy.decisions import DecisionsAPI  # noqa: E402
 from viyapy.dialects.base import MODEL_STEP_TYPE  # noqa: E402
 from viyapy.mas import MASClient  # noqa: E402
 
@@ -57,6 +58,8 @@ REQUIRED_ENDPOINTS = (
     "list_decision_flows",
     "list_decision_revisions",
     "get_decision_revision",
+    "get_decision_code",
+    "get_decision_revision_code",
     "execute_mas_step",
     "list_mas_modules",
     "get_mas_module",
@@ -243,6 +246,58 @@ def _check_generation(name: str, entry: dict[str, Any], problems: list[str]) -> 
             problems.append(
                 f"{tag} decision revision Accept: code {dialect.decision_media_type!r} "
                 f"!= contract {rev['accept']!r}"
+            )
+
+    # -- decision code (raw DS2 text): flow + revision paths + media type ----
+    code = endpoints.get("get_decision_code")
+    if code:
+        expected = code["path"].replace("{decision_id}", _ID)
+        actual = dialect.decision_code_path(_ID)
+        if actual != expected:
+            problems.append(f"{tag} decision_code_path: code {actual!r} != contract {expected!r}")
+        if dialect.decision_code_media_type != code["accept"]:
+            problems.append(
+                f"{tag} decision code Accept: code {dialect.decision_code_media_type!r} "
+                f"!= contract {code['accept']!r}"
+            )
+        # The raw response is read verbatim via request_text, so the client sends
+        # the same media type it expects back; keep the contract's documented
+        # response_media_type honest by pinning it to accept.
+        if "response_media_type" in code and code["response_media_type"] != code["accept"]:
+            problems.append(
+                f"{tag} decision code response_media_type {code['response_media_type']!r} "
+                f"!= accept {code['accept']!r}"
+            )
+        if not hasattr(DecisionsAPI, "get_code"):
+            problems.append(
+                f"{tag} contract declares get_decision_code but DecisionsAPI.get_code is missing"
+            )
+
+    rev_code = endpoints.get("get_decision_revision_code")
+    if rev_code:
+        expected = rev_code["path"].replace("{decision_id}", _ID).replace("{revision_id}", _REV)
+        actual = dialect.decision_revision_code_path(_ID, _REV)
+        if actual != expected:
+            problems.append(
+                f"{tag} decision_revision_code_path: code {actual!r} != contract {expected!r}"
+            )
+        if dialect.decision_code_media_type != rev_code["accept"]:
+            problems.append(
+                f"{tag} decision revision code Accept: code {dialect.decision_code_media_type!r} "
+                f"!= contract {rev_code['accept']!r}"
+            )
+        if (
+            "response_media_type" in rev_code
+            and rev_code["response_media_type"] != rev_code["accept"]
+        ):
+            problems.append(
+                f"{tag} decision revision code response_media_type "
+                f"{rev_code['response_media_type']!r} != accept {rev_code['accept']!r}"
+            )
+        if not hasattr(DecisionsAPI, "get_revision_code"):
+            problems.append(
+                f"{tag} contract declares get_decision_revision_code but "
+                "DecisionsAPI.get_revision_code is missing"
             )
 
     # -- MAS execute endpoint: path, request body, output shape -------------
@@ -674,6 +729,17 @@ def _check_fixtures(
                 problems.append(
                     f"{tag} {rev_file.name}: parse_decision dropped the major/minor revision"
                 )
+
+    # Decision code is returned as raw DS2 text (no JSON parser), so the fixture
+    # is a plain .ds2 file; assert it exists and is non-empty text. The same
+    # fixture stands in for both the flow-code and revision-code endpoints.
+    code_ep = endpoints.get("get_decision_code") or endpoints.get("get_decision_revision_code")
+    code_file = fixtures / "decision_code.ds2"
+    if code_ep:
+        if not code_file.exists():
+            problems.append(f"{tag} missing fixture {code_file.relative_to(REPO_ROOT)}")
+        elif not code_file.read_text(encoding="utf-8").strip():
+            problems.append(f"{tag} {code_file.name}: decision code fixture is empty")
 
 
 def check_all() -> list[str]:

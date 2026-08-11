@@ -88,6 +88,7 @@ class Dialect:
 
     name: str
     decision_media_type: str = "application/vnd.sas.decision+json"
+    decision_code_media_type: str = "text/vnd.sas.source.ds2"
     mas_module_media_type: str = MAS_MODULE_MEDIA_TYPE
     mas_module_definition_media_type: str = MAS_MODULE_DEFINITION_MEDIA_TYPE
     mas_module_source_media_type: str = MAS_MODULE_SOURCE_MEDIA_TYPE
@@ -125,6 +126,27 @@ class Dialect:
         return (
             f"/decisions/flows/{quote(decision_id, safe='')}"
             f"/revisions/{quote(revision_id, safe='')}"
+        )
+
+    def decision_code_path(self, decision_id: str) -> str:
+        """Return the relative path for a decision flow's generated code.
+
+        A ``GET`` (Accept ``text/vnd.sas.source.ds2``) returns the flow's
+        generated DS2 source as raw text (not JSON), for the flow's current
+        revision. The id is percent-encoded for the same reason as
+        :meth:`decision_path`.
+        """
+        return f"/decisions/flows/{quote(decision_id, safe='')}/code"
+
+    def decision_revision_code_path(self, decision_id: str, revision_id: str) -> str:
+        """Return the relative path for the generated code of one flow revision.
+
+        A ``GET`` (Accept ``text/vnd.sas.source.ds2``) returns the DS2 source as
+        raw text *at that revision*. Both segments are percent-encoded.
+        """
+        return (
+            f"/decisions/flows/{quote(decision_id, safe='')}"
+            f"/revisions/{quote(revision_id, safe='')}/code"
         )
 
     def mas_modules_path(self) -> str:

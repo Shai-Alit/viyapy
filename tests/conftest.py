@@ -34,6 +34,20 @@ def load_fixture() -> Callable[[str, str], Any]:
     return _load
 
 
+@pytest.fixture
+def load_fixture_text() -> Callable[[str, str], str]:
+    """Return a loader for a per-generation raw-text fixture (e.g. ``.ds2``).
+
+    Usage: ``load_fixture_text("viya4", "decision_code.ds2")``. Unlike
+    :func:`load_fixture`, the file is returned verbatim rather than JSON-parsed.
+    """
+
+    def _load(generation: str, name: str) -> str:
+        return (FIXTURES_DIR / generation / name).read_text(encoding="utf-8")
+
+    return _load
+
+
 @pytest.fixture(params=sorted(GENERATIONS))
 def generation(request: pytest.FixtureRequest) -> str:
     """Parametrize a test across every Viya generation (``viya4``, ``viya35``).
