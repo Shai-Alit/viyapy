@@ -40,6 +40,23 @@ endpoints:
     accept: application/vnd.sas.decision+json
     response_fields: [name, flow.steps, majorRevision, minorRevision, checkout]
 
+  - id: get_decision_code
+    method: GET
+    path: /decisions/flows/{decision_id}/code
+    # The flow's generated DS2 code for its CURRENT revision, returned as raw
+    # text (Content-Type text/vnd.sas.source.ds2), verbatim as a string — so
+    # there are no response_fields. `accept` is the request Accept header;
+    # `response_media_type` records the raw content type read via request_text.
+    accept: text/vnd.sas.source.ds2
+    response_media_type: text/vnd.sas.source.ds2
+
+  - id: get_decision_revision_code
+    method: GET
+    path: /decisions/flows/{decision_id}/revisions/{revision_id}/code
+    # Same raw-text DS2 code, but AT a specific historical revision.
+    accept: text/vnd.sas.source.ds2
+    response_media_type: text/vnd.sas.source.ds2
+
   - id: execute_mas_step
     method: POST
     path: /microanalyticScore/modules/{module_id}/steps/{step_id}

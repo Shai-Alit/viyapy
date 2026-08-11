@@ -97,6 +97,59 @@ class DecisionsAPI(RevisionsMixin[Decision]):
         """
         return self.get(decision_id).models
 
+    def get_code(self, decision_id: str) -> str:
+        """Fetch a decision flow's generated DS2 code (current revision).
+
+        Returns the server-generated DS2 source for the flow's *current*
+        revision as raw text — the same code the flow compiles to when scored.
+        For the code at a specific historical revision, use
+        :meth:`get_revision_code`.
+
+        Args:
+            decision_id: The decision id.
+
+        Returns:
+            The generated DS2 source, verbatim, as a string.
+
+        Raises:
+            ViyaConfigError: ``decision_id`` is empty or not a string.
+            ViyaNotFoundError: No decision with that id exists.
+            ViyaError: On any other failure.
+        """
+        decision_id = require_identifier(decision_id, "decision_id")
+        return self._http.request_text(
+            "GET",
+            self._dialect.decision_code_path(decision_id),
+            accept=self._dialect.decision_code_media_type,
+        )
+
+    def get_revision_code(self, decision_id: str, revision_id: str) -> str:
+        """Fetch a decision flow's generated DS2 code *at a given revision*.
+
+        Like :meth:`get_code`, but for a specific historical revision (see
+        :meth:`revisions` for the ids). Returns the generated DS2 source as raw
+        text.
+
+        Args:
+            decision_id: The decision id (the flow).
+            revision_id: The revision id, e.g. from :meth:`revisions`.
+
+        Returns:
+            The generated DS2 source at that revision, verbatim, as a string.
+
+        Raises:
+            ViyaConfigError: Either id is empty or not a string.
+            ViyaNotFoundError: No such decision or revision exists.
+            ViyaError: On any other failure.
+        """
+        decision_id = require_identifier(decision_id, "decision_id")
+        revision_id = require_identifier(revision_id, "revision_id")
+        return self._http.request_text(
+            "GET",
+            self._dialect.decision_revision_code_path(decision_id, revision_id),
+            accept=self._dialect.decision_code_media_type,
+        )
+
     # -- revision/lock hooks (see RevisionsMixin) ---------------------------
 
     def _revisions_path(self, resource_id: str) -> str:

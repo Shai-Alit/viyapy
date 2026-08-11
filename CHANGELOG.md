@@ -9,6 +9,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Reading a decision flow's generated code on `client.decisions`.
+  `get_code(flow_id)` returns the flow's server-generated SAS **DS2** source for
+  its current revision as raw text (`GET /decisions/flows/{id}/code`,
+  `text/vnd.sas.source.ds2`), and `get_revision_code(flow_id, revision_id)`
+  returns the DS2 *at* a specific revision. Both return the source verbatim as a
+  string. Backed by a new `HttpClient.request_text` primitive for plain-text
+  (non-JSON) endpoints. The related SAS *mapped code* endpoint (a POST binding
+  the flow to input/output tables) is intentionally out of scope for now. Wire
+  shapes were confirmed against a live Viya 4 instance; pinned in both generation
+  contracts and covered by unit and opt-in live integration tests.
 - Reading a decision flow's revision history on `client.decisions`.
   `revisions(flow_id)` lazily paginates `GET /decisions/flows/{id}/revisions`
   and yields a new lightweight `Revision` per entry — the `major.minor` version

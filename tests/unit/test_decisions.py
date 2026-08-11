@@ -338,3 +338,87 @@ def test_get_revision_missing_raises_not_found() -> None:
     )
     with pytest.raises(ViyaNotFoundError):
         make_client().decisions.get_revision("d1", "nope")
+
+
+# -- decision code (raw DS2 text) ------------------------------------------
+
+_DS2 = "ds2_options scond=WARNING;\npackage p; method run(); end; endpackage;"
+
+
+@responses.activate
+def test_get_code_returns_raw_ds2_text() -> None:
+    responses.add(
+        responses.GET,
+        f"{BASE}/decisions/flows/hmeq-credit-decision/code",
+        body=_DS2,
+        status=200,
+        content_type="text/vnd.sas.source.ds2;charset=UTF-8",
+    )
+
+    code = make_client().decisions.get_code("hmeq-credit-decision")
+
+    assert code == _DS2
+    assert responses.calls[0].request.headers["Accept"] == "text/vnd.sas.source.ds2"
+
+
+@responses.activate
+@pytest.mark.parametrize("bad_id", ["", "   "])
+def test_get_code_blank_id_fails_fast(bad_id: str) -> None:
+    with pytest.raises(ViyaConfigError):
+        make_client().decisions.get_code(bad_id)
+    assert len(responses.calls) == 0
+
+
+@responses.activate
+def test_get_code_percent_encodes_id() -> None:
+    responses.add(
+        responses.GET,
+        f"{BASE}/decisions/flows/weird%2Fid/code",
+        body=_DS2,
+        status=200,
+    )
+    make_client().decisions.get_code("weird/id")
+    assert "/decisions/flows/weird%2Fid/code" in responses.calls[0].request.url
+
+
+@responses.activate
+def test_get_code_missing_raises_not_found() -> None:
+    responses.add(
+        responses.GET, f"{BASE}/decisions/flows/nope/code", json={"message": "no"}, status=404
+    )
+    with pytest.raises(ViyaNotFoundError):
+        make_client().decisions.get_code("nope")
+
+
+@responses.activate
+def test_get_revision_code_returns_text_at_revision() -> None:
+    url = f"{BASE}/decisions/flows/hmeq-credit-decision/revisions/hmeq-rev-0002/code"
+    responses.add(responses.GET, url, body=_DS2, status=200)
+
+    code = make_client().decisions.get_revision_code("hmeq-credit-decision", "hmeq-rev-0002")
+
+    assert code == _DS2
+    assert responses.calls[0].request.headers["Accept"] == "text/vnd.sas.source.ds2"
+
+
+@responses.activate
+@pytest.mark.parametrize("bad_id", ["", "   "])
+def test_get_revision_code_blank_ids_fail_fast(bad_id: str) -> None:
+    with pytest.raises(ViyaConfigError):
+        make_client().decisions.get_revision_code("d1", bad_id)
+    with pytest.raises(ViyaConfigError):
+        make_client().decisions.get_revision_code(bad_id, "r1")
+    assert len(responses.calls) == 0
+
+
+@responses.activate
+def test_get_revision_code_percent_encodes_ids() -> None:
+    responses.add(
+        responses.GET,
+        f"{BASE}/decisions/flows/weird%2Fid/revisions/weird%2Frev/code",
+        body=_DS2,
+        status=200,
+    )
+    make_client().decisions.get_revision_code("weird/id", "weird/rev")
+    url = responses.calls[0].request.url
+    assert "/decisions/flows/weird%2Fid/revisions/weird%2Frev/code" in url

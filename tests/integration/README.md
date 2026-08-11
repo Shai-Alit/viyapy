@@ -44,6 +44,11 @@ Per generation there are several tests, all driven by the variables above:
   `client.decisions.get_revision(...)` and asserts it round-trips into a
   `Decision`. Tolerates a flow with no separate revision history (it only takes a
   bounded slice, and skips the `get_revision` step if the slice is empty).
+- **decision code** (`<PREFIX>_DECISION`) — read-only: fetches the flow's generated
+  DS2 for the current revision (`client.decisions.get_code(...)`) and asserts it is
+  a non-empty string, then fetches the code at one revision
+  (`client.decisions.get_revision_code(...)`) and asserts the same. Tolerates a flow
+  with no separate revision history (it stops after the first revision).
 - **mas execute** (`<PREFIX>_MODULE`, `<PREFIX>_INPUTS`) — executes the module
   step and checks the outputs parse.
 - **mas validate** (`<PREFIX>_MODULE`, `<PREFIX>_INPUTS`) — POSTs the inputs to the

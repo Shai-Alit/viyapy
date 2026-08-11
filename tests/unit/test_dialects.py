@@ -160,6 +160,26 @@ def test_decision_revision_paths_percent_encode() -> None:
 
 
 @pytest.mark.parametrize("dialect", [Viya4Dialect(), Viya35Dialect()])
+def test_decision_code_paths_are_shared(dialect: object) -> None:
+    assert dialect.decision_code_path("d1") == "/decisions/flows/d1/code"  # type: ignore[attr-defined]
+    assert (
+        dialect.decision_revision_code_path("d1", "r2")  # type: ignore[attr-defined]
+        == "/decisions/flows/d1/revisions/r2/code"
+    )
+    # Both generations request the raw DS2 source media type.
+    assert dialect.decision_code_media_type == "text/vnd.sas.source.ds2"  # type: ignore[attr-defined]
+
+
+def test_decision_code_paths_percent_encode() -> None:
+    dialect = Viya4Dialect()
+    assert dialect.decision_code_path("a/b") == "/decisions/flows/a%2Fb/code"
+    assert (
+        dialect.decision_revision_code_path("a/b", "c?d")
+        == "/decisions/flows/a%2Fb/revisions/c%3Fd/code"
+    )
+
+
+@pytest.mark.parametrize("dialect", [Viya4Dialect(), Viya35Dialect()])
 def test_parse_revision_reads_core_fields(dialect: object) -> None:
     revision = dialect.parse_revision(  # type: ignore[attr-defined]
         {

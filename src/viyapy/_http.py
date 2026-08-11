@@ -299,6 +299,19 @@ class HttpClient:
         response = self.request(method, path, **kwargs)
         return self._parse_json_object(response), response
 
+    def request_text(self, method: str, path: str, **kwargs: Any) -> str:
+        """Issue a request and return the response body as decoded text.
+
+        For endpoints that return a plain-text representation rather than JSON —
+        e.g. a decision flow's generated DS2 code
+        (``text/vnd.sas.source.ds2``). The body is returned verbatim as
+        :attr:`requests.Response.text`.
+
+        Raises:
+            (everything :meth:`request` raises)
+        """
+        return self.request(method, path, **kwargs).text
+
     @staticmethod
     def _parse_json_object(response: requests.Response) -> dict[str, Any]:
         try:

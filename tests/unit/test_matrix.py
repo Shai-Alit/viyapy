@@ -73,3 +73,22 @@ def test_decision_revisions_across_generations(
     decision = client.decisions.get_revision("d1", "rev")
     assert decision.major_revision is not None
     assert decision.raw == full
+
+
+@responses.activate
+def test_decision_code_across_generations(
+    generation: str,
+    version_for: Callable[[str], str],
+    load_fixture_text: Callable[[str, str], str],
+) -> None:
+    code = load_fixture_text(generation, "decision_code.ds2")
+    responses.add(responses.GET, f"{BASE}/decisions/flows/d1/code", body=code, status=200)
+    responses.add(
+        responses.GET, f"{BASE}/decisions/flows/d1/revisions/rev/code", body=code, status=200
+    )
+
+    client = ViyaClient(BASE, TOKEN, viya_version=version_for(generation), max_retries=0)
+
+    # Both generations return the generated DS2 as raw text, verbatim.
+    assert client.decisions.get_code("d1") == code
+    assert client.decisions.get_revision_code("d1", "rev") == code
