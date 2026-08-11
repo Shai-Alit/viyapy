@@ -7,6 +7,7 @@ from typing import Any
 
 from ._http import HttpClient
 from ._pagination import iter_collection
+from ._polling import DEFAULT_POLL_INTERVAL, DEFAULT_POLL_TIMEOUT, poll_until
 from ._validation import (
     check_inputs_against_signature,
     optional_identifier,
@@ -16,8 +17,20 @@ from ._validation import (
     require_positive_int,
 )
 from .dialects.base import DEFAULT_MAS_STEP, Dialect
-from .exceptions import ViyaConfigError, ViyaResponseError, ViyaValidationError
-from .models import ExecutionResult, MasModule, ModuleSource, StepSignature, ValidationResult
+from .exceptions import (
+    ViyaConfigError,
+    ViyaJobError,
+    ViyaResponseError,
+    ViyaValidationError,
+)
+from .models import (
+    CompileJob,
+    ExecutionResult,
+    MasModule,
+    ModuleSource,
+    StepSignature,
+    ValidationResult,
+)
 
 DEFAULT_PAGE_SIZE = 100
 DEFAULT_SCOPE = "public"
@@ -130,6 +143,9 @@ class MASClient:
         language: str = "ds2",
         scope: str = DEFAULT_SCOPE,
         description: str | None = None,
+        wait: bool = False,
+        poll_timeout: float = DEFAULT_POLL_TIMEOUT,
+        poll_interval: float = DEFAULT_POLL_INTERVAL,
         timeout: float | tuple[float, float] | None = None,
     ) -> MasModule:
         """Create a new MAS module from source code.
@@ -137,6 +153,20 @@ class MASClient:
         Compiles ``source`` server-side into a module identified by ``module_id``.
         The module then exposes callable steps (typically ``execute``) that
         :meth:`execute` can run.
+
+        Two compilation paths are available, selected by ``wait``:
+
+        - ``wait=False`` (default) — a single synchronous ``POST /modules``: the
+          server compiles the source in the request and returns the finished
+          module. A compile error surfaces as a :class:`ViyaAPIError`.
+        - ``wait=True`` — submit an asynchronous compile *job* (see
+          :meth:`submit_compile_job`) and block until it finishes, then fetch and
+          return the compiled module. A job that fails to compile surfaces as a
+          :class:`~viyapy.exceptions.ViyaJobError` carrying the compiler
+          diagnostics, rather than an HTTP error. Use this for sources whose
+          compilation is slow enough to risk an HTTP read timeout, or when you
+          want the job's structured diagnostics; ``poll_timeout`` and
+          ``poll_interval`` tune the wait (see :meth:`wait_for_job`).
 
         Args:
             module_id: The id to create the module under. Must be a non-empty
@@ -146,19 +176,51 @@ class MASClient:
                 selecting the source media type MAS compiles the body as.
             scope: Module scope; MAS requires one (defaults to ``"public"``).
             description: Optional human-readable description.
-            timeout: Optional per-call timeout override (compilation may need a
-                longer read timeout than a metadata GET).
+            wait: When ``True``, compile asynchronously via a job and block until
+                it completes (see above). Defaults to ``False`` (synchronous).
+            poll_timeout: Overall wait budget in seconds when ``wait=True``
+                (ignored otherwise). Defaults to :data:`DEFAULT_POLL_TIMEOUT`.
+            poll_interval: Delay between job polls in seconds when ``wait=True``
+                (ignored otherwise). Defaults to :data:`DEFAULT_POLL_INTERVAL`.
+            timeout: Optional per-call timeout override for each HTTP request
+                (compilation may need a longer read timeout than a metadata GET).
 
         Returns:
             The parsed :class:`MasModule` for the freshly created module.
 
         Raises:
             ViyaConfigError: ``module_id``/``scope`` is empty or not a string,
-                ``source`` is empty, or ``language`` is not supported.
-            ViyaAPIError: The server rejected the definition (e.g. a compile error
-                or an id that already exists).
+                ``source`` is empty, ``language`` is not supported, or (when
+                ``wait=True``) ``poll_timeout``/``poll_interval`` is not positive.
+            ViyaAPIError: The server rejected the definition (e.g. a synchronous
+                compile error or an id that already exists).
+            ViyaJobError: ``wait=True`` and the compile job finished ``failed``
+                (carries the compiler diagnostics).
+            ViyaPollTimeoutError: ``wait=True`` and the job did not finish within
+                ``poll_timeout``.
             ViyaError: On any other failure.
         """
+        if wait:
+            job = self.submit_compile_job(
+                module_id,
+                source,
+                language=language,
+                scope=scope,
+                description=description,
+                timeout=timeout,
+            )
+            job = self.wait_for_job(
+                job.id,
+                poll_timeout=poll_timeout,
+                poll_interval=poll_interval,
+                raise_on_failure=True,
+                timeout=timeout,
+            )
+            # The job completed; the compiled module now exists. Prefer the id the
+            # job reports (authoritative) but fall back to the requested one.
+            compiled_id = job.module_id or require_identifier(module_id, "module_id")
+            return self.get(compiled_id)
+
         module_id = require_identifier(module_id, "module_id")
         source = require_non_empty_str(source, "source")
         scope = require_identifier(scope, "scope")
@@ -323,6 +385,169 @@ class MASClient:
             self._dialect.mas_module_path(module_id),
             timeout=timeout,
         )
+
+    def submit_compile_job(
+        self,
+        module_id: str,
+        source: str,
+        *,
+        language: str = "ds2",
+        scope: str = DEFAULT_SCOPE,
+        description: str | None = None,
+        timeout: float | tuple[float, float] | None = None,
+    ) -> CompileJob:
+        """Submit an asynchronous job to compile a module, without waiting.
+
+        Posts the same module definition as :meth:`create` to the MAS compile-job
+        collection (``POST /microanalyticScore/jobs``), which accepts it (HTTP 202)
+        and compiles the module in the background. This returns immediately with a
+        :class:`~viyapy.models.CompileJob` in a non-terminal state (typically
+        ``pending``); poll it with :meth:`get_job`, or use :meth:`wait_for_job` to
+        block until it settles. For the common submit-and-block case, prefer
+        ``create(..., wait=True)``.
+
+        Note that a *grossly* malformed source (one MAS cannot even parse into a
+        DS2 package) is still rejected synchronously here as an HTTP 400 rather
+        than accepted as a job; a source that parses but fails to compile is
+        accepted and later reaches a ``failed`` state on the job.
+
+        Args:
+            module_id: The id to compile the module under. Must be a non-empty
+                string; a module with this id must not already exist.
+            source: The module source code (DS2 or Python), sent verbatim.
+            language: Source language — ``"ds2"`` (default) or ``"python"``.
+            scope: Module scope; MAS requires one (defaults to ``"public"``).
+            description: Optional human-readable description.
+            timeout: Optional per-call timeout override.
+
+        Returns:
+            The parsed :class:`~viyapy.models.CompileJob` (usually ``pending``).
+
+        Raises:
+            ViyaConfigError: ``module_id``/``scope`` is empty or not a string,
+                ``source`` is empty, or ``language`` is not supported.
+            ViyaResponseError: The 202 response carried no usable job payload.
+            ViyaAPIError: The server rejected the submission (e.g. an unparseable
+                source, or an id that already exists).
+            ViyaError: On any other failure.
+        """
+        module_id = require_identifier(module_id, "module_id")
+        source = require_non_empty_str(source, "source")
+        scope = require_identifier(scope, "scope")
+        source_type = _source_type_for_language(language, "language")
+        # A compile job is submitted with the same module.definition body as a
+        # synchronous create; only the Accept/response envelope differs.
+        body = self._dialect.build_module_definition(
+            module_id,
+            source,
+            source_type=source_type,
+            scope=scope,
+            description=description,
+        )
+        raw = self._http.request_json(
+            "POST",
+            self._dialect.mas_jobs_path(),
+            accept=self._dialect.mas_job_media_type,
+            content_type=self._dialect.mas_module_definition_media_type,
+            json_body=body,
+            timeout=timeout,
+        )
+        return self._dialect.parse_compile_job(raw)
+
+    def get_job(
+        self,
+        job_id: str,
+        *,
+        timeout: float | tuple[float, float] | None = None,
+    ) -> CompileJob:
+        """Fetch the current state of a MAS compile job.
+
+        Args:
+            job_id: The id of a job returned by :meth:`submit_compile_job`.
+            timeout: Optional per-call timeout override.
+
+        Returns:
+            The parsed :class:`~viyapy.models.CompileJob` in its current state.
+
+        Raises:
+            ViyaConfigError: ``job_id`` is empty or not a string.
+            ViyaNotFoundError: No job with that id exists.
+            ViyaResponseError: The response was not a usable job payload.
+            ViyaError: On any other failure.
+        """
+        job_id = require_identifier(job_id, "job_id")
+        raw = self._http.request_json(
+            "GET",
+            self._dialect.mas_job_path(job_id),
+            accept=self._dialect.mas_job_media_type,
+            timeout=timeout,
+        )
+        return self._dialect.parse_compile_job(raw)
+
+    def wait_for_job(
+        self,
+        job_id: str,
+        *,
+        poll_timeout: float = DEFAULT_POLL_TIMEOUT,
+        poll_interval: float = DEFAULT_POLL_INTERVAL,
+        raise_on_failure: bool = True,
+        timeout: float | tuple[float, float] | None = None,
+    ) -> CompileJob:
+        """Poll a compile job until it finishes, or the wait budget expires.
+
+        Repeatedly calls :meth:`get_job` (starting immediately, then every
+        ``poll_interval`` seconds) until the job reaches a terminal state
+        (``completed`` or ``failed``), then returns it. A job that finishes
+        ``failed`` is, by default, surfaced as a
+        :class:`~viyapy.exceptions.ViyaJobError` carrying the compiler diagnostics;
+        pass ``raise_on_failure=False`` to instead return the failed
+        :class:`~viyapy.models.CompileJob` and inspect ``.failed``/``.errors``
+        yourself (mirroring ``validate_remote(raise_on_invalid=False)``).
+
+        A timeout does not cancel the job — it may still finish server-side, so a
+        caller can re-poll the same ``job_id`` to keep waiting.
+
+        Args:
+            job_id: The id of a job returned by :meth:`submit_compile_job`.
+            poll_timeout: Overall wait budget in seconds (must be positive).
+            poll_interval: Delay between polls in seconds (must be positive).
+            raise_on_failure: When ``True`` (default), raise ``ViyaJobError`` if the
+                job finishes ``failed``. When ``False``, return the failed job.
+            timeout: Optional per-call HTTP timeout override for each poll.
+
+        Returns:
+            The terminal :class:`~viyapy.models.CompileJob` (``completed``, or
+            ``failed`` when ``raise_on_failure=False``).
+
+        Raises:
+            ViyaConfigError: ``job_id`` is empty, or ``poll_timeout``/
+                ``poll_interval`` is not a positive number.
+            ViyaNotFoundError: No job with that id exists.
+            ViyaResponseError: A poll response was not a usable job payload.
+            ViyaJobError: ``raise_on_failure`` is set and the job finished failed.
+            ViyaPollTimeoutError: The job did not finish within ``poll_timeout``.
+            ViyaError: On any other failure.
+        """
+        job_id = require_identifier(job_id, "job_id")
+        job = poll_until(
+            lambda: self.get_job(job_id, timeout=timeout),
+            lambda j: j.done,
+            timeout=poll_timeout,
+            interval=poll_interval,
+            describe=lambda j: j.state or "unknown",
+        )
+        if raise_on_failure and job.failed:
+            detail = "; ".join(job.errors) if job.errors else "the job reported no diagnostics"
+            raise ViyaJobError(
+                f"MAS compile job {job.id!r} for module "
+                f"{job.module_id or '<unknown>'!r} failed: {detail}",
+                job_id=job.id,
+                module_id=job.module_id,
+                state=job.state,
+                errors=job.errors,
+                response_body=job.raw,
+            )
+        return job
 
     def get_signature(
         self,

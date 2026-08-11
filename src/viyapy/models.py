@@ -18,6 +18,14 @@ EXECUTION_COMPLETED = "completed"
 EXECUTION_TIMED_OUT = "timedOut"
 EXECUTION_SUBMITTED = "submitted"
 
+# MAS compile-job ``state`` values, returned on a ``/microanalyticScore/jobs``
+# resource. A freshly submitted job starts ``pending`` (and may pass through
+# ``running``); it settles in one of the two terminal states below.
+JOB_PENDING = "pending"
+JOB_RUNNING = "running"
+JOB_COMPLETED = "completed"
+JOB_FAILED = "failed"
+
 
 @dataclass(frozen=True)
 class ModelStep:
@@ -111,6 +119,61 @@ class ModuleSource:
     creation_timestamp: str | None = None
     modified_timestamp: str | None = None
     raw: dict[str, Any] = field(default_factory=dict, repr=False)
+
+
+@dataclass(frozen=True)
+class CompileJob:
+    """An asynchronous MAS module compile job.
+
+    Returned by :meth:`~viyapy.mas.MASClient.submit_compile_job`,
+    :meth:`~viyapy.mas.MASClient.get_job`, and
+    :meth:`~viyapy.mas.MASClient.wait_for_job`. A job is submitted against the
+    ``/microanalyticScore/jobs`` collection and compiles a module in the
+    background; poll it until :attr:`done`, then check :attr:`completed` vs
+    :attr:`failed`. On success the compiled module is available under
+    :attr:`module_id`; on failure the compiler diagnostics are on :attr:`errors`.
+
+    Attributes:
+        id: The job id (a server-assigned UUID).
+        module_id: The id of the module the job compiles, if reported.
+        operation: The operation the job performs (e.g. ``"create"``), if
+            reported.
+        state: The job state (``"pending"``, ``"running"``, ``"completed"``, or
+            ``"failed"``), if reported.
+        errors: Compiler/diagnostic messages reported by a failed job (empty
+            while pending or on success).
+        created_by: User who submitted the job, if reported.
+        modified_by: User who last modified the job, if reported.
+        creation_timestamp: Creation timestamp string, if reported.
+        modified_timestamp: Last-modified timestamp string, if reported.
+        raw: The originating job payload.
+    """
+
+    id: str
+    module_id: str | None = None
+    operation: str | None = None
+    state: str | None = None
+    errors: tuple[str, ...] = ()
+    created_by: str | None = None
+    modified_by: str | None = None
+    creation_timestamp: str | None = None
+    modified_timestamp: str | None = None
+    raw: dict[str, Any] = field(default_factory=dict, repr=False)
+
+    @property
+    def completed(self) -> bool:
+        """Whether the job finished successfully (the module was compiled)."""
+        return self.state == JOB_COMPLETED
+
+    @property
+    def failed(self) -> bool:
+        """Whether the job finished in a failure state (see :attr:`errors`)."""
+        return self.state == JOB_FAILED
+
+    @property
+    def done(self) -> bool:
+        """Whether the job has reached a terminal state (completed or failed)."""
+        return self.state in (JOB_COMPLETED, JOB_FAILED)
 
 
 @dataclass(frozen=True)

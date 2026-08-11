@@ -1,0 +1,28 @@
+{
+  "id": "a1b2c3d4-0000-4a5b-8c9d-000000000002",
+  "moduleId": "api_tester_bad_0",
+  "operation": "create",
+  "state": "failed",
+  "errors": [
+    "Line 6: Unknown function nonexistent_func.",
+    "Line 6: Unable to resolve method call for nonexistent_func."
+  ],
+  "createdBy": "sasdemo",
+  "creationTimeStamp": "2026-06-01T12:00:00.000Z",
+  "modifiedBy": "sasdemo",
+  "modifiedTimeStamp": "2026-06-01T12:00:03.000Z",
+  "version": 1,
+  "links": [
+    {
+      "method": "GET",
+      "rel": "self",
+      "href": "/microanalyticScore/jobs/a1b2c3d4-0000-4a5b-8c9d-000000000002",
+      "type": "application/vnd.sas.microanalytic.job"
+    },
+    {
+      "method": "DELETE",
+      "rel": "delete",
+      "href": "/microanalyticScore/jobs/a1b2c3d4-0000-4a5b-8c9d-000000000002"
+    }
+  ]
+}

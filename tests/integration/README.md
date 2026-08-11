@@ -53,6 +53,12 @@ Per generation there are several tests, all driven by the variables above:
   `ETag`/`If-Match` round trip), then deletes it. Self-contained (no
   `<PREFIX>_MODULE` needed) and self-cleaning, but gated behind `ALLOW_CRUD`
   because it mutates the deployment.
+- **mas compile_job** (`<PREFIX>_ALLOW_CRUD`) — async compile lifecycle: submits a
+  compile job (`submit_compile_job`), polls it to completion (`wait_for_job`),
+  confirms the compiled module exists, then deletes it; also submits a
+  parse-ok/compile-fail source and asserts it reaches a `failed` job carrying
+  diagnostics. Self-contained and self-cleaning, gated behind the same
+  `ALLOW_CRUD` opt-in because it mutates the deployment.
 
 ## Running against Viya 4
 

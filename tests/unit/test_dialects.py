@@ -123,3 +123,51 @@ def test_both_dialects_tolerate_either_output_key(dialect: Dialect) -> None:
 def test_missing_output_list_raises_response_error() -> None:
     with pytest.raises(ViyaResponseError):
         Viya4Dialect().parse_execution("m", "execute", {"executionState": "completed"})
+
+
+# -- compile jobs ----------------------------------------------------------
+
+
+def test_mas_job_paths_and_media_type() -> None:
+    dialect = Viya4Dialect()
+    assert dialect.mas_jobs_path() == "/microanalyticScore/jobs"
+    assert dialect.mas_job_path("j1") == "/microanalyticScore/jobs/j1"
+    # Ids are percent-encoded so a slashed id can't escape the path segment.
+    assert dialect.mas_job_path("a/b") == "/microanalyticScore/jobs/a%2Fb"
+    assert dialect.mas_job_media_type == "application/vnd.sas.microanalytic.job+json"
+
+
+@pytest.mark.parametrize("dialect", [Viya4Dialect(), Viya35Dialect()])
+def test_parse_compile_job_reads_core_fields(dialect: Dialect) -> None:
+    job = dialect.parse_compile_job(
+        {
+            "id": "job-1",
+            "moduleId": "m",
+            "operation": "create",
+            "state": "completed",
+            "errors": [],
+        }
+    )
+    assert job.id == "job-1"
+    assert job.module_id == "m"
+    assert job.operation == "create"
+    assert job.completed
+
+
+def test_parse_compile_job_coerces_error_entries_to_strings() -> None:
+    job = Viya4Dialect().parse_compile_job(
+        {"id": "j", "state": "failed", "errors": ["a", 42, {"m": "x"}]}
+    )
+    assert job.failed
+    assert job.errors == ("a", "42", "{'m': 'x'}")
+
+
+def test_parse_compile_job_tolerates_missing_errors() -> None:
+    job = Viya4Dialect().parse_compile_job({"id": "j", "state": "pending"})
+    assert job.errors == ()
+
+
+@pytest.mark.parametrize("raw", [{}, {"id": ""}, {"id": "   "}, {"id": 5}, {"state": "pending"}])
+def test_parse_compile_job_without_usable_id_raises(raw: dict[str, Any]) -> None:
+    with pytest.raises(ViyaResponseError):
+        Viya4Dialect().parse_compile_job(raw)

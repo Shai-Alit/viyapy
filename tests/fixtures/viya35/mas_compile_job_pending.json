@@ -1,0 +1,31 @@
+{
+  "id": "a1b2c3d4-0000-4a5b-8c9d-000000000001",
+  "moduleId": "api_tester1_0",
+  "operation": "create",
+  "state": "pending",
+  "errors": [],
+  "createdBy": "sasdemo",
+  "creationTimeStamp": "2026-06-01T12:00:00.000Z",
+  "modifiedBy": "sasdemo",
+  "modifiedTimeStamp": "2026-06-01T12:00:00.000Z",
+  "version": 1,
+  "links": [
+    {
+      "method": "GET",
+      "rel": "self",
+      "href": "/microanalyticScore/jobs/a1b2c3d4-0000-4a5b-8c9d-000000000001",
+      "type": "application/vnd.sas.microanalytic.job"
+    },
+    {
+      "method": "GET",
+      "rel": "source",
+      "href": "/microanalyticScore/jobs/a1b2c3d4-0000-4a5b-8c9d-000000000001/source",
+      "type": "application/vnd.sas.microanalytic.module.source"
+    },
+    {
+      "method": "DELETE",
+      "rel": "delete",
+      "href": "/microanalyticScore/jobs/a1b2c3d4-0000-4a5b-8c9d-000000000001"
+    }
+  ]
+}

@@ -9,6 +9,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Asynchronous MAS module compilation on `client.mas`. `create` gains a `wait`
+  flag: `create(..., wait=True)` submits an async *compile job*, blocks until it
+  settles, and returns the compiled `MasModule` (tuned by `poll_timeout`/
+  `poll_interval`), while the default `wait=False` keeps the single synchronous
+  `POST /modules`. The underlying steps are also exposed directly:
+  `submit_compile_job` posts the module definition to `POST /microanalyticScore/jobs`
+  (202) and returns a `pending` `CompileJob`; `get_job` re-fetches a job's state;
+  and `wait_for_job` polls to a terminal state, raising `ViyaJobError` with the
+  compiler diagnostics on a failed job (or returning it when
+  `raise_on_failure=False`). A grossly unparseable source is still rejected
+  synchronously as a `ViyaAPIError`; only a source that parses but fails to compile
+  becomes a `failed` job. Polling is built on a new generation-agnostic helper
+  (reused by later async features), which raises `ViyaPollTimeoutError` when the
+  budget elapses without cancelling the server-side work. New `CompileJob`,
+  `ViyaJobError`, and `ViyaPollTimeoutError` are exported from the package root. The
+  submit/poll wire shapes and the sync-vs-async boundary were confirmed against a
+  live Viya 4 instance; documented in both generation contracts and covered by unit
+  and opt-in live integration tests.
 - MAS module lifecycle management on `client.mas`: `create` compiles a module from
   source (`language` `"ds2"`/`"python"`, `scope`, optional `description`) and
   returns the resulting `MasModule`; `get_source` reads a module's source
