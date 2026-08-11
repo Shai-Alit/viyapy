@@ -205,7 +205,8 @@ class DecisionsAPI(RevisionsMixin[Decision]):
             ViyaConfigError: ``decision_id`` is empty/not a string, no field was
                 given to change, or ``name``/``flow`` has the wrong type.
             ViyaNotFoundError: No decision with that id exists.
-            ViyaResponseError: The flow reported no usable ETag.
+            ViyaResponseError: The flow reported no usable ETag, or (when
+                ``name`` is not being changed) no usable name to preserve.
             ViyaAPIError: The server rejected the update (e.g. a 412 if the flow
                 changed concurrently).
             ViyaError: On any other failure.
@@ -235,9 +236,20 @@ class DecisionsAPI(RevisionsMixin[Decision]):
                 "it without the concurrency guard",
                 response_body=current,
             )
-        merged_name = require_non_empty_str(
-            name if name is not None else current.get("name"), "name"
-        )
+        # ``name`` was validated above; fall back to the fetched representation
+        # otherwise. A missing name here is the server's payload being
+        # incomplete, not a bad argument, so surface it as a response error.
+        if name is not None:
+            merged_name = name
+        else:
+            fetched_name = current.get("name")
+            if not isinstance(fetched_name, str) or not fetched_name:
+                raise ViyaResponseError(
+                    f"decision {decision_id!r} returned no usable name; cannot "
+                    "build the update body",
+                    response_body=current,
+                )
+            merged_name = fetched_name
         body = self._dialect.build_decision_definition(
             merged_name,
             description=description if description is not None else current.get("description"),

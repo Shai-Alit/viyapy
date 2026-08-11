@@ -426,6 +426,18 @@ def _check_generation(name: str, entry: dict[str, Any], problems: list[str]) -> 
                 f"{tag} update_decision_flow Accept: code {dialect.decision_media_type!r} "
                 f"!= contract {dec_update['accept']!r}"
             )
+        # update shares build_decision_definition with create today, but check
+        # its request body against the contract independently so a future
+        # divergence in how the update body is assembled would still be caught.
+        if "request_fields" in dec_update:
+            built = list(
+                dialect.build_decision_definition("n", description="d", flow={"steps": []}).keys()
+            )
+            if built != dec_update["request_fields"]:
+                problems.append(
+                    f"{tag} update_decision_flow request body keys: code {built} "
+                    f"!= contract {dec_update['request_fields']}"
+                )
         # The If-Match precondition is load-bearing; the contract must declare it
         # so a future refactor that drops the header is a reviewable change.
         if "If-Match" not in dec_update.get("required_headers", []):

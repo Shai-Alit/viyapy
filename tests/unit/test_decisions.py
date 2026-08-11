@@ -728,6 +728,24 @@ def test_update_missing_etag_raises_response_error() -> None:
 
 
 @responses.activate
+def test_update_missing_name_in_fetched_rep_raises_response_error() -> None:
+    # When the caller isn't changing the name, update() falls back to the fetched
+    # representation's name. If the server's payload has no usable name, that is a
+    # bad *response*, not a bad argument, so it must raise ViyaResponseError (not
+    # the ViyaConfigError used for caller-supplied bad names) and issue no PUT.
+    responses.add(
+        responses.GET,
+        _UPDATE_URL,
+        json={"id": "d1", "flow": {"steps": []}},
+        status=200,
+        headers={"ETag": '"rev3"'},
+    )
+    with pytest.raises(ViyaResponseError):
+        make_client().decisions.update("d1", description="only changing this")
+    assert [c.request.method for c in responses.calls] == ["GET"]
+
+
+@responses.activate
 def test_update_precondition_failure_propagates() -> None:
     _add_flow_get_for_etag()
     responses.add(

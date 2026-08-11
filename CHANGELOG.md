@@ -15,12 +15,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   **raw dict** (an empty `{"steps": []}` is valid); the optional `description`,
   `signature`, and `properties` are forwarded verbatim, and the server-assigned
   id and revision numbers are surfaced on the returned `Decision`.
-  `update(flow_id, ...)` changes a flow's authorable fields
+  `update(decision_id, ...)` changes a flow's authorable fields
   (`PUT /decisions/flows/{id}`): it fetches the flow to read its `ETag`, overlays
   only the fields you pass onto the current representation (so unspecified fields
   are preserved, not wiped), and sends the guarded `PUT` with `If-Match` — a
   concurrent change surfaces as a precondition failure (HTTP 412) rather than a
-  silent overwrite. `delete(flow_id)` removes a flow
+  silent overwrite. `delete(decision_id)` removes a flow
   (`DELETE /decisions/flows/{id}`, 204). Create and update both use the
   `application/vnd.sas.decision+json` media type for the request and response.
   Wire shapes were confirmed against a live Viya 4 instance; pinned in both
