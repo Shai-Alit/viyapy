@@ -1,0 +1,72 @@
+{
+  "name": "decisions",
+  "accept": "application/vnd.sas.summary",
+  "start": 0,
+  "count": 2,
+  "limit": 100,
+  "items": [
+    {
+      "creationTimeStamp": "2026-06-24T01:58:36.651Z",
+      "modifiedTimeStamp": "2026-06-24T02:23:05.809Z",
+      "createdBy": "sasdemo",
+      "modifiedBy": "sasdemo",
+      "id": "hmeq-credit-decision",
+      "type": "decision",
+      "name": "HMEQ Credit Decision",
+      "description": "Demo home-equity loan decision flow",
+      "links": [
+        {
+          "method": "GET",
+          "rel": "self",
+          "href": "/decisions/flows/hmeq-credit-decision",
+          "type": "application/vnd.sas.decision"
+        },
+        {
+          "method": "GET",
+          "rel": "alternate",
+          "href": "/decisions/flows/hmeq-credit-decision",
+          "type": "application/vnd.sas.summary"
+        },
+        {
+          "method": "DELETE",
+          "rel": "delete",
+          "href": "/decisions/flows/hmeq-credit-decision"
+        }
+      ],
+      "version": 2
+    },
+    {
+      "creationTimeStamp": "2026-05-10T08:00:00.000Z",
+      "modifiedTimeStamp": "2026-07-01T14:22:00.000Z",
+      "createdBy": "sasdemo",
+      "modifiedBy": "analyst",
+      "id": "nbo-offer-flow",
+      "type": "decision",
+      "name": "NBO Offer",
+      "links": [
+        {
+          "method": "GET",
+          "rel": "self",
+          "href": "/decisions/flows/nbo-offer-flow",
+          "type": "application/vnd.sas.decision"
+        }
+      ],
+      "version": 2
+    }
+  ],
+  "links": [
+    {
+      "method": "GET",
+      "rel": "collection",
+      "href": "/decisions/flows",
+      "type": "application/vnd.sas.collection"
+    },
+    {
+      "method": "GET",
+      "rel": "self",
+      "href": "/decisions/flows?start=0&limit=100",
+      "type": "application/vnd.sas.collection"
+    }
+  ],
+  "version": 2
+}

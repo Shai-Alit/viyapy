@@ -16,6 +16,13 @@ endpoints:
     accept: application/vnd.sas.decision+json
     response_fields: [name, flow.steps]
 
+  - id: list_decision_flows
+    method: GET
+    path: /decisions/flows
+    accept: application/vnd.sas.collection+json
+    response_fields: [items]
+    item_fields: [id, name, description, type, createdBy, modifiedBy, creationTimeStamp, modifiedTimeStamp]
+
   - id: execute_mas_step
     method: POST
     path: /microanalyticScore/modules/{module_id}/steps/{step_id}

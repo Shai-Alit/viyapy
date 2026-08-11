@@ -18,6 +18,15 @@ endpoints:
     # Fields the client reads off the decision payload (dotted = nested).
     response_fields: [name, flow.steps]
 
+  - id: list_decision_flows
+    method: GET
+    path: /decisions/flows
+    accept: application/vnd.sas.collection+json
+    # Each collection item is an application/vnd.sas.summary; these are the
+    # fields the client reads off a decision summary.
+    response_fields: [items]
+    item_fields: [id, name, description, type, createdBy, modifiedBy, creationTimeStamp, modifiedTimeStamp]
+
   - id: execute_mas_step
     method: POST
     path: /microanalyticScore/modules/{module_id}/steps/{step_id}

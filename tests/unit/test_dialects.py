@@ -96,6 +96,51 @@ def test_parse_decision_tolerates_missing_flow() -> None:
     assert decision.models == ()
 
 
+@pytest.mark.parametrize("dialect", [Viya4Dialect(), Viya35Dialect()])
+def test_decisions_flows_path_is_shared(dialect: object) -> None:
+    assert dialect.decisions_flows_path() == "/decisions/flows"  # type: ignore[attr-defined]
+
+
+@pytest.mark.parametrize("dialect", [Viya4Dialect(), Viya35Dialect()])
+def test_parse_decision_summary_reads_core_fields(dialect: object) -> None:
+    summary = dialect.parse_decision_summary(  # type: ignore[attr-defined]
+        {
+            "id": "hmeq",
+            "name": "HMEQ",
+            "description": "demo",
+            "type": "decision",
+            "createdBy": "sasdemo",
+            "modifiedBy": "analyst",
+            "creationTimeStamp": "2026-06-24T01:58:36.651Z",
+            "modifiedTimeStamp": "2026-06-24T02:23:05.809Z",
+        }
+    )
+    assert summary.id == "hmeq"
+    assert summary.name == "HMEQ"
+    assert summary.description == "demo"
+    assert summary.type == "decision"
+    assert summary.created_by == "sasdemo"
+    assert summary.modified_by == "analyst"
+    assert summary.creation_timestamp == "2026-06-24T01:58:36.651Z"
+    assert summary.modified_timestamp == "2026-06-24T02:23:05.809Z"
+
+
+def test_parse_decision_summary_tolerates_sparse_item() -> None:
+    # Only an id is guaranteed; every other field must degrade to None, and a
+    # blank string must not survive as "".
+    summary = Viya4Dialect().parse_decision_summary({"id": "d1", "name": "   "})
+    assert summary.id == "d1"
+    assert summary.name is None
+    assert summary.description is None
+    assert summary.type is None
+
+
+@pytest.mark.parametrize("bad", [{}, {"id": ""}, {"id": "   "}, {"id": 42}, {"name": "x"}])
+def test_parse_decision_summary_without_usable_id_raises(bad: dict[str, object]) -> None:
+    with pytest.raises(ViyaResponseError):
+        Viya4Dialect().parse_decision_summary(bad)
+
+
 # -- execution parsing / the output vs outputs matrix -----------------------
 
 

@@ -22,6 +22,10 @@ if TYPE_CHECKING:
 
 COLLECTION_MEDIA_TYPE = "application/vnd.sas.collection+json"
 
+# Default number of items requested per page for ``list``-style operations.
+# Larger pages mean fewer round trips; the server may cap the effective size.
+DEFAULT_PAGE_SIZE = 100
+
 
 def iter_collection(
     http: HttpClient,

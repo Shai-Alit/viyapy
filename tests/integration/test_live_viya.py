@@ -21,6 +21,7 @@ import pytest
 from viyapy import (
     CompileJob,
     Decision,
+    DecisionSummary,
     ExecutionResult,
     MasModule,
     ModuleSource,
@@ -52,6 +53,20 @@ def _check_decision(client: ViyaClient, decision_id: str) -> None:
     assert decision.id == decision_id
     assert isinstance(decision.raw, dict)
     assert isinstance(decision.models, tuple)
+
+
+def _check_decision_list(client: ViyaClient) -> None:
+    # Read-only: page through the deployment's decision flows and confirm each
+    # item parses into a DecisionSummary carrying a usable id. Take a bounded
+    # slice so the assertion is O(1) even on a large deployment, and tolerate an
+    # empty deployment (the endpoint round trip and parsing are what matter).
+    for seen, summary in enumerate(client.decisions.list()):
+        assert isinstance(summary, DecisionSummary)
+        assert isinstance(summary.id, str)
+        assert summary.id
+        assert isinstance(summary.raw, dict)
+        if seen >= 4:  # a bounded slice — 5 items is plenty to assert the shape
+            break
 
 
 def _check_mas(client: ViyaClient, module_id: str, inputs_json: str | None) -> None:
@@ -186,6 +201,11 @@ def _run(prefix: str, version: str, kind: str) -> None:
         with ViyaClient(env["host"], env["token"], viya_version=version) as client:  # type: ignore[arg-type]
             _check_decision(client, env["decision"])
         return
+    if kind == "decision_list":
+        # Read-only: no decision id required, just host/token.
+        with ViyaClient(env["host"], env["token"], viya_version=version) as client:  # type: ignore[arg-type]
+            _check_decision_list(client)
+        return
     if kind == "crud":
         # The CRUD lifecycle creates and deletes a module, so it's gated behind a
         # separate explicit opt-in to avoid mutating a deployment by surprise.
@@ -222,6 +242,10 @@ def test_viya4_decision_get() -> None:
     _run("VIYAPY_TEST_4", "4", "decision")
 
 
+def test_viya4_decisions_list() -> None:
+    _run("VIYAPY_TEST_4", "4", "decision_list")
+
+
 def test_viya4_mas_execute() -> None:
     _run("VIYAPY_TEST_4", "4", "mas")
 
@@ -251,6 +275,10 @@ def test_viya4_mas_compile_job() -> None:
 
 def test_viya35_decision_get() -> None:
     _run("VIYAPY_TEST_35", "3.5", "decision")
+
+
+def test_viya35_decisions_list() -> None:
+    _run("VIYAPY_TEST_35", "3.5", "decision_list")
 
 
 def test_viya35_mas_execute() -> None:
