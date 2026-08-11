@@ -62,6 +62,9 @@ REQUIRED_ENDPOINTS = (
     "get_decision_revision_code",
     "get_decision_external_artifacts",
     "get_decision_revision_external_artifacts",
+    "create_decision_flow",
+    "update_decision_flow",
+    "delete_decision_flow",
     "execute_mas_step",
     "list_mas_modules",
     "get_mas_module",
@@ -372,6 +375,92 @@ def _check_generation(name: str, entry: dict[str, Any], problems: list[str]) -> 
             problems.append(
                 f"{tag} contract declares get_decision_revision_external_artifacts but "
                 "DecisionsAPI.revision_external_artifacts is missing"
+            )
+
+    # -- decision flow create/update/delete: paths, media, body, guards ------
+    dec_create = endpoints.get("create_decision_flow")
+    if dec_create:
+        if dialect.decisions_flows_path() != dec_create["path"]:
+            problems.append(
+                f"{tag} create_decision_flow path: code {dialect.decisions_flows_path()!r} "
+                f"!= contract {dec_create['path']!r}"
+            )
+        if dialect.decision_media_type != dec_create["content_type"]:
+            problems.append(
+                f"{tag} create_decision_flow Content-Type: code {dialect.decision_media_type!r} "
+                f"!= contract {dec_create['content_type']!r}"
+            )
+        if dialect.decision_media_type != dec_create["accept"]:
+            problems.append(
+                f"{tag} create_decision_flow Accept: code {dialect.decision_media_type!r} "
+                f"!= contract {dec_create['accept']!r}"
+            )
+        built = list(
+            dialect.build_decision_definition("n", description="d", flow={"steps": []}).keys()
+        )
+        if built != dec_create["request_fields"]:
+            problems.append(
+                f"{tag} create_decision_flow request body keys: code {built} "
+                f"!= contract {dec_create['request_fields']}"
+            )
+        if not hasattr(DecisionsAPI, "create"):
+            problems.append(
+                f"{tag} contract declares create_decision_flow but DecisionsAPI.create is missing"
+            )
+
+    dec_update = endpoints.get("update_decision_flow")
+    if dec_update:
+        expected = dec_update["path"].replace("{decision_id}", _ID)
+        actual = dialect.decision_path(_ID)
+        if actual != expected:
+            problems.append(
+                f"{tag} update_decision_flow path: code {actual!r} != contract {expected!r}"
+            )
+        if dialect.decision_media_type != dec_update["content_type"]:
+            problems.append(
+                f"{tag} update_decision_flow Content-Type: code {dialect.decision_media_type!r} "
+                f"!= contract {dec_update['content_type']!r}"
+            )
+        if dialect.decision_media_type != dec_update["accept"]:
+            problems.append(
+                f"{tag} update_decision_flow Accept: code {dialect.decision_media_type!r} "
+                f"!= contract {dec_update['accept']!r}"
+            )
+        # update shares build_decision_definition with create today, but check
+        # its request body against the contract independently so a future
+        # divergence in how the update body is assembled would still be caught.
+        if "request_fields" in dec_update:
+            built = list(
+                dialect.build_decision_definition("n", description="d", flow={"steps": []}).keys()
+            )
+            if built != dec_update["request_fields"]:
+                problems.append(
+                    f"{tag} update_decision_flow request body keys: code {built} "
+                    f"!= contract {dec_update['request_fields']}"
+                )
+        # The If-Match precondition is load-bearing; the contract must declare it
+        # so a future refactor that drops the header is a reviewable change.
+        if "If-Match" not in dec_update.get("required_headers", []):
+            problems.append(
+                f"{tag} update_decision_flow must declare If-Match in required_headers "
+                "(the server returns 428 without it)"
+            )
+        if not hasattr(DecisionsAPI, "update"):
+            problems.append(
+                f"{tag} contract declares update_decision_flow but DecisionsAPI.update is missing"
+            )
+
+    dec_delete = endpoints.get("delete_decision_flow")
+    if dec_delete:
+        expected = dec_delete["path"].replace("{decision_id}", _ID)
+        actual = dialect.decision_path(_ID)
+        if actual != expected:
+            problems.append(
+                f"{tag} delete_decision_flow path: code {actual!r} != contract {expected!r}"
+            )
+        if not hasattr(DecisionsAPI, "delete"):
+            problems.append(
+                f"{tag} contract declares delete_decision_flow but DecisionsAPI.delete is missing"
             )
 
     # -- MAS execute endpoint: path, request body, output shape -------------

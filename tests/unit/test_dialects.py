@@ -381,3 +381,54 @@ def test_parse_compile_job_tolerates_missing_errors() -> None:
 def test_parse_compile_job_without_usable_id_raises(raw: dict[str, Any]) -> None:
     with pytest.raises(ViyaResponseError):
         Viya4Dialect().parse_compile_job(raw)
+
+
+# -- build_decision_definition (decision-flow authorable body) --------------
+
+
+def test_build_decision_definition_minimal_is_name_only() -> None:
+    body = Viya4Dialect().build_decision_definition("My Flow")
+    assert body == {"name": "My Flow"}
+
+
+def test_build_decision_definition_includes_provided_fields() -> None:
+    sig = {"variables": [{"name": "score"}]}
+    props = {"custom": 1}
+    body = Viya4Dialect().build_decision_definition(
+        "My Flow",
+        description="d",
+        flow={"steps": []},
+        signature=sig,
+        properties=props,
+    )
+    assert body == {
+        "name": "My Flow",
+        "description": "d",
+        "flow": {"steps": []},
+        "signature": sig,
+        "properties": props,
+    }
+    # Insertion order matters: it feeds the drift checker's request_fields check.
+    assert list(body) == ["name", "description", "flow", "signature", "properties"]
+
+
+def test_build_decision_definition_omits_absent_fields_rather_than_nulling() -> None:
+    body = Viya4Dialect().build_decision_definition("n", flow={"steps": []})
+    assert "description" not in body
+    assert "signature" not in body
+    assert "properties" not in body
+
+
+def test_build_decision_definition_copies_the_flow_mapping() -> None:
+    # The flow mapping is copied, so adding a top-level key to the caller's dict
+    # afterward can't leak into an already-built body.
+    flow: dict[str, Any] = {"steps": []}
+    body = Viya4Dialect().build_decision_definition("n", flow=flow)
+    flow["extra"] = "leak"
+    assert "extra" not in body["flow"]
+
+
+def test_build_decision_definition_is_shared_across_generations() -> None:
+    v4 = Viya4Dialect().build_decision_definition("n", description="d", flow={"steps": []})
+    v35 = Viya35Dialect().build_decision_definition("n", description="d", flow={"steps": []})
+    assert v4 == v35

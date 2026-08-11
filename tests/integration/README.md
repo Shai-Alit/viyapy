@@ -22,12 +22,12 @@ Per generation (`VIYAPY_TEST_4_*` for Viya 4, `VIYAPY_TEST_35_*` for Viya 3.5):
 | `<PREFIX>_DECISION` | for the decision + revisions tests | A decision id to `GET` (and whose revision history to read) |
 | `<PREFIX>_MODULE` | for the MAS execute/validate/submit/metadata tests | A published module id |
 | `<PREFIX>_INPUTS` | optional | JSON object of MAS inputs (default `{}`) |
-| `<PREFIX>_ALLOW_CRUD` | for the MAS CRUD lifecycle test | Set to any value to opt in to the module-mutating create/update/delete test |
+| `<PREFIX>_ALLOW_CRUD` | for the MAS + decision CRUD lifecycle tests | Set to any value to opt in to the module- and flow-mutating create/update/delete tests |
 
 If `HOST`/`TOKEN` are unset the whole generation is skipped; if only
 `DECISION`/`MODULE` are unset, just the test needing it is skipped. The CRUD
-lifecycle test additionally skips unless `<PREFIX>_ALLOW_CRUD` is set, since it
-creates and deletes a module on the deployment.
+lifecycle tests additionally skip unless `<PREFIX>_ALLOW_CRUD` is set, since they
+create and delete a module (and a decision flow) on the deployment.
 
 ## What each test does
 
@@ -57,6 +57,12 @@ Per generation there are several tests, all driven by the variables above:
   endpoint is not paginated, so both calls return the full tuple in one response.
   Tolerates a flow that references no external artifacts (an empty tuple) and one
   with no separate revision history (it stops after the first revision).
+- **decision crud** (`<PREFIX>_ALLOW_CRUD`) — full flow lifecycle: creates a
+  throwaway decision flow (an empty `{"steps": []}` flow), reads it back, updates
+  its description (exercising the `ETag`/`If-Match` round trip), then deletes it
+  and confirms a follow-up get 404s. Self-contained (no `<PREFIX>_DECISION`
+  needed) and self-cleaning, but gated behind `ALLOW_CRUD` because it mutates the
+  deployment.
 - **mas execute** (`<PREFIX>_MODULE`, `<PREFIX>_INPUTS`) — executes the module
   step and checks the outputs parse.
 - **mas validate** (`<PREFIX>_MODULE`, `<PREFIX>_INPUTS`) — POSTs the inputs to the

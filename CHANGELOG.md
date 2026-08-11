@@ -9,6 +9,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Authoring decision flows on `client.decisions`: `create`, `update`, and
+  `delete`. `create(name, flow, ...)` posts a new flow
+  (`POST /decisions/flows`) — for now the `flow` graph is passed through as a
+  **raw dict** (an empty `{"steps": []}` is valid); the optional `description`,
+  `signature`, and `properties` are forwarded verbatim, and the server-assigned
+  id and revision numbers are surfaced on the returned `Decision`.
+  `update(decision_id, ...)` changes a flow's authorable fields
+  (`PUT /decisions/flows/{id}`): it fetches the flow to read its `ETag`, overlays
+  only the fields you pass onto the current representation (so unspecified fields
+  are preserved, not wiped), and sends the guarded `PUT` with `If-Match` — a
+  concurrent change surfaces as a precondition failure (HTTP 412) rather than a
+  silent overwrite. `delete(decision_id)` removes a flow
+  (`DELETE /decisions/flows/{id}`, 204). Create and update both use the
+  `application/vnd.sas.decision+json` media type for the request and response.
+  Wire shapes were confirmed against a live Viya 4 instance; pinned in both
+  generation contracts and covered by unit and opt-in (CRUD-gated) live
+  integration tests. A typed flow-graph builder is deferred to a later phase.
 - Reading a decision flow's external artifacts on `client.decisions`.
   `external_artifacts(flow_id)` returns the resources a flow depends on outside
   the flow itself — most commonly the analytic store backing a model step — for

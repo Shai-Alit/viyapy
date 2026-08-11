@@ -1,7 +1,7 @@
 # Working with Decisions
 
 The `client.decisions` group ([`DecisionsAPI`][viyapy.decisions.DecisionsAPI])
-reads SAS Intelligent Decisioning decision flows.
+reads and authors SAS Intelligent Decisioning decision flows.
 
 ## Fetch a decision
 
@@ -204,6 +204,52 @@ models = client.decisions.list_models("my-decision-id")
     `list_models` issues its own fresh request each call and does not cache. If
     you need both the flow and its models, call `get` once and reuse the returned
     `Decision`.
+
+## Authoring decision flows
+
+Beyond reading, `client.decisions` can create, update, and delete flows.
+
+[`create`][viyapy.decisions.DecisionsAPI.create] posts a new flow and returns the
+server's [`Decision`][viyapy.Decision], with the id and revision numbers the
+server assigns:
+
+```python
+decision = client.decisions.create(
+    "My New Flow",
+    {"steps": []},                     # the flow graph, as a raw dict
+    description="created via viyapy",
+)
+
+decision.id              # the server-assigned id
+decision.major_revision  # 1
+decision.minor_revision  # 0
+```
+
+The flow graph is passed through as a **raw dict** — an empty `{"steps": []}` is a
+valid starting flow — and the optional `signature` and `properties` are forwarded
+verbatim when given. (A typed flow-graph builder is planned for a later release.)
+
+[`update`][viyapy.decisions.DecisionsAPI.update] changes a flow's authorable
+fields. Pass only what you want to change; unspecified fields are preserved:
+
+```python
+decision = client.decisions.update(
+    "my-decision-id",
+    description="a new description",   # name/flow/signature/properties untouched
+)
+```
+
+Updates are guarded by optimistic concurrency: `update` first fetches the flow to
+read its `ETag`, then sends the change back with an `If-Match` header. If the flow
+changed on the server between those two steps, the update fails with a precondition
+error ([`ViyaAPIError`][viyapy.ViyaAPIError], HTTP 412) rather than silently
+overwriting the concurrent change — so retry against the fresh state.
+
+[`delete`][viyapy.decisions.DecisionsAPI.delete] removes a flow:
+
+```python
+client.decisions.delete("my-decision-id")
+```
 
 ## Errors
 
