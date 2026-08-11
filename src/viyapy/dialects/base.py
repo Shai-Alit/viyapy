@@ -24,6 +24,7 @@ from ..models import (
     MasModule,
     ModelStep,
     ModuleSource,
+    Revision,
     StepSignature,
     ValidationResult,
     Variable,
@@ -53,6 +54,11 @@ def _coerce_int(value: Any) -> int | None:
     if isinstance(value, bool) or not isinstance(value, int):
         return None
     return value
+
+
+def _bool_or_none(value: Any) -> bool | None:
+    """Return ``value`` if it is a real ``bool``, else ``None``."""
+    return value if isinstance(value, bool) else None
 
 
 def _prefer_str(value: Any, fallback: str) -> str:
@@ -100,6 +106,26 @@ class Dialect:
     def decisions_flows_path(self) -> str:
         """Return the relative path for the decision-flows collection."""
         return "/decisions/flows"
+
+    def decision_revisions_path(self, decision_id: str) -> str:
+        """Return the relative path for a decision flow's revisions collection.
+
+        A ``GET`` returns the ``/revisions`` subcollection of lightweight
+        revision summaries. The id is percent-encoded for the same reason as
+        :meth:`decision_path`.
+        """
+        return f"/decisions/flows/{quote(decision_id, safe='')}/revisions"
+
+    def decision_revision_path(self, decision_id: str, revision_id: str) -> str:
+        """Return the relative path for one revision of a decision flow.
+
+        A ``GET`` (Accept ``application/vnd.sas.decision+json``) returns the full
+        decision content *at that revision*. Both segments are percent-encoded.
+        """
+        return (
+            f"/decisions/flows/{quote(decision_id, safe='')}"
+            f"/revisions/{quote(revision_id, safe='')}"
+        )
 
     def mas_modules_path(self) -> str:
         """Return the relative path for the MAS modules collection."""
@@ -285,7 +311,11 @@ class Dialect:
         """Build a :class:`Decision` from a decision-flow payload.
 
         Extracts the model steps from ``flow.steps`` (ignoring non-model steps)
-        and retains the full payload on :attr:`Decision.raw`.
+        and the revision/lock metadata (``majorRevision``, ``minorRevision``,
+        ``checkout``), and retains the full payload on :attr:`Decision.raw`. The
+        same shape is returned whether the payload is the current flow (from
+        ``GET /decisions/flows/{id}``) or a specific historical revision (from
+        ``GET /decisions/flows/{id}/revisions/{revisionId}``).
         """
         flow = raw.get("flow")
         steps = flow.get("steps", []) if isinstance(flow, Mapping) else []
@@ -299,7 +329,50 @@ class Dialect:
             for step in steps
             if isinstance(step, Mapping) and step.get("type") == MODEL_STEP_TYPE
         )
-        return Decision(id=decision_id, name=raw.get("name"), models=models, raw=dict(raw))
+        return Decision(
+            id=decision_id,
+            name=raw.get("name"),
+            models=models,
+            major_revision=_coerce_int(raw.get("majorRevision")),
+            minor_revision=_coerce_int(raw.get("minorRevision")),
+            checkout=_bool_or_none(raw.get("checkout")),
+            raw=dict(raw),
+        )
+
+    def parse_revision(self, raw: Mapping[str, Any]) -> Revision:
+        """Build a :class:`Revision` from one ``/revisions`` collection item.
+
+        Each item is a lightweight revision summary carrying the ``major.minor``
+        version pair, the ``checkout`` lock indicator, and audit metadata. The
+        full payload is retained on :attr:`Revision.raw`. This shape is shared
+        across versioned resources (decision flows, business rulesets), so the
+        parser lives on the base dialect rather than a per-resource override.
+
+        Raises:
+            ViyaResponseError: The payload has no usable string ``id`` — without
+                it the returned revision would have a false identity, so a
+                malformed response fails loudly here.
+        """
+        revision_id = raw.get("id")
+        if not isinstance(revision_id, str) or not revision_id.strip():
+            raise ViyaResponseError(
+                "revision payload has no usable 'id' field",
+                response_body=dict(raw),
+            )
+        return Revision(
+            id=revision_id.strip(),
+            major_revision=_coerce_int(raw.get("majorRevision")),
+            minor_revision=_coerce_int(raw.get("minorRevision")),
+            description=_str_or_none(raw.get("description")),
+            node_count=_coerce_int(raw.get("nodeCount")),
+            checkout=_bool_or_none(raw.get("checkout")),
+            workflow_definition_id=_str_or_none(raw.get("workflowDefinitionId")),
+            created_by=_str_or_none(raw.get("createdBy")),
+            modified_by=_str_or_none(raw.get("modifiedBy")),
+            creation_timestamp=_str_or_none(raw.get("creationTimeStamp")),
+            modified_timestamp=_str_or_none(raw.get("modifiedTimeStamp")),
+            raw=dict(raw),
+        )
 
     def parse_module(self, raw: Mapping[str, Any]) -> MasModule:
         """Build a :class:`MasModule` from a MAS module payload.

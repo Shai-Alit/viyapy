@@ -1,0 +1,34 @@
+{
+  "id": "hmeq-rev-0002",
+  "decisionId": "hmeq-credit-decision",
+  "name": "HMEQ Credit Decision",
+  "majorRevision": 1,
+  "minorRevision": 1,
+  "checkout": false,
+  "nodeCount": 3,
+  "flow": {
+    "steps": [
+      {
+        "type": "application/vnd.sas.decision.step.model",
+        "model": { "name": "Credit Scoring Model" },
+        "modifiedBy": "sasdemo",
+        "modifiedTimeStamp": "2026-06-24T01:58:36.651Z"
+      },
+      {
+        "type": "application/vnd.sas.decision.step.ruleset",
+        "ruleSet": { "name": "Eligibility Rules" }
+      },
+      {
+        "type": "application/vnd.sas.decision.step.model",
+        "model": { "name": "Fraud Model" },
+        "modifiedBy": "analyst",
+        "modifiedTimeStamp": "2026-06-24T02:23:05.809Z"
+      }
+    ]
+  },
+  "creationTimeStamp": "2026-06-24T02:23:05.809Z",
+  "modifiedTimeStamp": "2026-06-24T02:23:05.809Z",
+  "createdBy": "sasdemo",
+  "modifiedBy": "analyst",
+  "version": 17
+}

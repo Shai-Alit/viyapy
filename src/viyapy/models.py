@@ -48,16 +48,30 @@ class ModelStep:
 class Decision:
     """A SAS Intelligent Decisioning decision flow.
 
+    Fetching a decision by id returns its *current* revision; the
+    ``major_revision``/``minor_revision`` pair identifies which revision that is,
+    and ``checkout`` reports whether the flow is currently checked out (locked)
+    for editing. The same shape is returned when fetching a specific historical
+    revision via ``ViyaClient.decisions.get_revision``.
+
     Attributes:
-        id: The decision id.
+        id: The decision id. For a specific historical revision (from
+            ``get_revision``) this is the revision id, not the flow id.
         name: The decision's name, if present.
         models: The model steps contained in the flow.
+        major_revision: The major revision number, if reported.
+        minor_revision: The minor revision number, if reported.
+        checkout: Whether the flow is checked out (locked) for editing, if
+            reported. ``None`` when the server did not report it.
         raw: The originating decision payload.
     """
 
     id: str
     name: str | None = None
     models: tuple[ModelStep, ...] = ()
+    major_revision: int | None = None
+    minor_revision: int | None = None
+    checkout: bool | None = None
     raw: dict[str, Any] = field(default_factory=dict, repr=False)
 
 
@@ -91,6 +105,60 @@ class DecisionSummary:
     creation_timestamp: str | None = None
     modified_timestamp: str | None = None
     raw: dict[str, Any] = field(default_factory=dict, repr=False)
+
+
+@dataclass(frozen=True)
+class Revision:
+    """One entry in a versioned resource's revision history.
+
+    SAS Viya versions several resource types identically — decision flows and
+    business rulesets both expose a ``/revisions`` subcollection of these
+    lightweight summaries. Each revision carries a ``major.minor`` version pair
+    and a ``checkout`` flag (the checked-out/lock indicator). Fetch the full
+    object at a given revision with the owning API's ``get_revision`` (e.g.
+    ``ViyaClient.decisions.get_revision(flow_id, revision.id)``).
+
+    Attributes:
+        id: The revision id.
+        major_revision: The major revision number, if reported.
+        minor_revision: The minor revision number, if reported.
+        description: The revision's description, if present.
+        node_count: The number of nodes in the flow at this revision, if
+            reported.
+        checkout: Whether this revision is checked out (locked) for editing, if
+            reported. ``None`` when the server did not report it.
+        workflow_definition_id: The associated workflow-definition id, if
+            reported.
+        created_by: User who created the revision, if reported.
+        modified_by: User who last modified the revision, if reported.
+        creation_timestamp: Creation timestamp string, if reported.
+        modified_timestamp: Last-modified timestamp string, if reported.
+        raw: The originating revision payload.
+    """
+
+    id: str
+    major_revision: int | None = None
+    minor_revision: int | None = None
+    description: str | None = None
+    node_count: int | None = None
+    checkout: bool | None = None
+    workflow_definition_id: str | None = None
+    created_by: str | None = None
+    modified_by: str | None = None
+    creation_timestamp: str | None = None
+    modified_timestamp: str | None = None
+    raw: dict[str, Any] = field(default_factory=dict, repr=False)
+
+    @property
+    def label(self) -> str | None:
+        """A ``"major.minor"`` version label (e.g. ``"1.3"``).
+
+        ``None`` when either component is missing, so callers can distinguish an
+        unknown revision from a real ``"0.0"``.
+        """
+        if self.major_revision is None or self.minor_revision is None:
+            return None
+        return f"{self.major_revision}.{self.minor_revision}"
 
 
 @dataclass(frozen=True)

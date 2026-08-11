@@ -11,11 +11,19 @@ reads SAS Intelligent Decisioning decision flows.
 ```python
 decision = client.decisions.get("my-decision-id")
 
-decision.id        # the decision id
-decision.name      # the flow's name, if present
-decision.models    # tuple[ModelStep, ...] — the model steps in the flow
-decision.raw       # the raw payload, as a dict, if you need an escape hatch
+decision.id              # the decision id
+decision.name            # the flow's name, if present
+decision.models          # tuple[ModelStep, ...] — the model steps in the flow
+decision.major_revision  # the current major revision number, if reported
+decision.minor_revision  # the current minor revision number, if reported
+decision.checkout        # whether the flow is checked out (locked), if reported
+decision.raw             # the raw payload, as a dict, if you need an escape hatch
 ```
+
+A plain `get` returns the flow's **current** revision; the
+`major_revision`/`minor_revision` pair identifies which one that is, and
+`checkout` reports whether it is checked out (locked) for editing. Each defaults
+to `None` when the deployment does not report it.
 
 Each entry in `decision.models` is a [`ModelStep`][viyapy.ModelStep]:
 
@@ -68,6 +76,51 @@ than on first iteration:
 ```python
 flows = list(client.decisions.list(page_size=500))
 ```
+
+## Revision history
+
+Every decision flow is versioned. [`revisions`][viyapy.decisions.DecisionsAPI.revisions]
+iterates a flow's revision history, yielding a lightweight
+[`Revision`][viyapy.Revision] per entry. Like `list`, it pages lazily as you
+consume the iterator:
+
+```python
+for revision in client.decisions.revisions("my-decision-id"):
+    print(revision.label, revision.checkout, revision.modified_timestamp)
+
+revision.id                  # the revision id
+revision.major_revision      # the major revision number, if reported
+revision.minor_revision      # the minor revision number, if reported
+revision.label               # a convenience "major.minor" string (e.g. "1.3"),
+                             # or None if either component is missing
+revision.description         # the revision's description, if present
+revision.node_count          # nodes in the flow at this revision, if reported
+revision.checkout            # whether this revision is checked out (locked)
+revision.workflow_definition_id
+revision.created_by          # audit metadata, if reported
+revision.modified_by
+revision.creation_timestamp
+revision.modified_timestamp
+revision.raw                 # the raw revision payload, as a dict
+```
+
+To load a flow's full content **at** a specific revision, pass the flow id and
+the revision id to
+[`get_revision`][viyapy.decisions.DecisionsAPI.get_revision]. It returns the same
+typed [`Decision`][viyapy.Decision] as `get` (its `id` is the revision id):
+
+```python
+for revision in client.decisions.revisions("my-decision-id"):
+    snapshot = client.decisions.get_revision("my-decision-id", revision.id)
+    print(snapshot.name, [m.name for m in snapshot.models])
+```
+
+!!! note
+    A plain `get("my-decision-id")` already returns the **current** revision, so
+    there is no separate "current revision" call — read `major_revision` /
+    `minor_revision` off the returned `Decision`.
+
+`page_size` behaves exactly as for `list` (default `100`, validated eagerly).
 
 ## List just the models
 

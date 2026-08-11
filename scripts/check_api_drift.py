@@ -48,12 +48,15 @@ QUERY_PARAM_TO_EXECUTE_KW = {"waitTime": "wait_time"}
 _ID = "__ID__"
 _MODULE = "__MODULE__"
 _STEP = "__STEP__"
+_REV = "__REV__"
 
 # Every generation must declare these endpoints; the checker fails if one is
 # missing so a deleted entry can't silently pass the gate.
 REQUIRED_ENDPOINTS = (
     "get_decision_content",
     "list_decision_flows",
+    "list_decision_revisions",
+    "get_decision_revision",
     "execute_mas_step",
     "list_mas_modules",
     "get_mas_module",
@@ -180,6 +183,67 @@ def _check_generation(name: str, entry: dict[str, Any], problems: list[str]) -> 
                         )
         else:
             problems.append(f"{tag} missing fixture: {flows_fixture.relative_to(REPO_ROOT)}")
+
+    # -- decision revisions list endpoint: path + revision item fields ------
+    revs = endpoints.get("list_decision_revisions")
+    if revs:
+        expected = revs["path"].replace("{decision_id}", _ID)
+        actual = dialect.decision_revisions_path(_ID)
+        if actual != expected:
+            problems.append(
+                f"{tag} decision_revisions_path: code {actual!r} != contract {expected!r}"
+            )
+        # Round-trip the recorded revisions fixture through the revision parser
+        # and assert every declared item field is actually surfaced.
+        revs_fixture = FIXTURES_DIR / name / "decision_revisions.json"
+        if revs_fixture.exists():
+            page = _load_json(revs_fixture)
+            items = page.get("items") if isinstance(page, dict) else None
+            if not isinstance(items, list) or not items:
+                problems.append(f"{tag} decision_revisions.json fixture has no items to parse")
+            else:
+                revision = dialect.parse_revision(items[0])
+                field_attr = {
+                    "id": revision.id,
+                    "majorRevision": revision.major_revision,
+                    "minorRevision": revision.minor_revision,
+                    "description": revision.description,
+                    "nodeCount": revision.node_count,
+                    "checkout": revision.checkout,
+                    "workflowDefinitionId": revision.workflow_definition_id,
+                    "createdBy": revision.created_by,
+                    "modifiedBy": revision.modified_by,
+                    "creationTimeStamp": revision.creation_timestamp,
+                    "modifiedTimeStamp": revision.modified_timestamp,
+                }
+                for wire_field in revs.get("item_fields", []):
+                    if wire_field not in field_attr:
+                        problems.append(
+                            f"{tag} list_decision_revisions item_field {wire_field!r} is declared "
+                            "but the checker has no mapping for it (add it to field_attr)"
+                        )
+                    elif items[0].get(wire_field) is not None and field_attr[wire_field] is None:
+                        problems.append(
+                            f"{tag} Revision drops item field {wire_field!r}: "
+                            "present in the fixture but not surfaced by parse_revision"
+                        )
+        else:
+            problems.append(f"{tag} missing fixture: {revs_fixture.relative_to(REPO_ROOT)}")
+
+    # -- decision revision get endpoint: path + media type ------------------
+    rev = endpoints.get("get_decision_revision")
+    if rev:
+        expected = rev["path"].replace("{decision_id}", _ID).replace("{revision_id}", _REV)
+        actual = dialect.decision_revision_path(_ID, _REV)
+        if actual != expected:
+            problems.append(
+                f"{tag} decision_revision_path: code {actual!r} != contract {expected!r}"
+            )
+        if dialect.decision_media_type != rev["accept"]:
+            problems.append(
+                f"{tag} decision revision Accept: code {dialect.decision_media_type!r} "
+                f"!= contract {rev['accept']!r}"
+            )
 
     # -- MAS execute endpoint: path, request body, output shape -------------
     mas = endpoints.get("execute_mas_step")
@@ -586,6 +650,29 @@ def _check_fixtures(
                 problems.append(
                     f"{tag} {dec_file.name}: no model steps parsed — check model_step_type "
                     f"({contract.get('model_step_type')!r})"
+                )
+
+    # A full-revision payload is a decision at that revision — round-trip it
+    # through parse_decision and confirm the revision metadata is surfaced.
+    rev_ep = endpoints.get("get_decision_revision")
+    rev_file = fixtures / "decision_revision.json"
+    if rev_ep:
+        if not rev_file.exists():
+            problems.append(f"{tag} missing fixture {rev_file.relative_to(REPO_ROOT)}")
+        else:
+            raw = _load_json(rev_file)
+            for field in rev_ep.get("response_fields", []):
+                if not _has_path(raw, field):
+                    problems.append(
+                        f"{tag} fixture {rev_file.name} missing response field {field!r}"
+                    )
+            parsed = dialect.parse_decision(_REV, raw)
+            if not parsed.models:
+                problems.append(f"{tag} {rev_file.name}: no model steps parsed from the revision")
+            # The revision metadata the contract declares must round-trip.
+            if parsed.major_revision is None or parsed.minor_revision is None:
+                problems.append(
+                    f"{tag} {rev_file.name}: parse_decision dropped the major/minor revision"
                 )
 
 
