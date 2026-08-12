@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- `parse_execution` no longer raises `TypeError` when a MAS output entry carries
+  a non-string `name` (e.g. a list or number). Such a name can't address an
+  output, so the entry is now skipped — matching how nameless entries are already
+  handled — instead of being used as an (unhashable) dict key. Surfaced by a
+  Hypothesis property test.
+
 ### Added
 
 - A typed flow builder (`FlowBuilder`, `TermMapping`), exported from the package
