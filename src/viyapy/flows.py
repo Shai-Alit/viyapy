@@ -37,6 +37,7 @@ dict is never required — though it remains accepted as an escape hatch.
 
 from __future__ import annotations
 
+import copy
 from collections.abc import Iterable
 from dataclasses import dataclass
 from typing import Any
@@ -273,8 +274,10 @@ class FlowBuilder:
         """Append a raw, pre-formed step dict (escape hatch).
 
         For step types the builder does not model yet (custom-object, branch), or
-        for reusing a step read back from an existing flow. The dict is copied and
-        appended verbatim; only a minimal ``type`` sanity check is applied.
+        for reusing a step read back from an existing flow. The dict is
+        **deep-copied** and appended verbatim, so later mutations of the caller's
+        dict (including nested values) cannot corrupt the builder; only a minimal
+        ``type`` sanity check is applied.
 
         Args:
             step: A step mapping carrying at least a non-empty ``type``.
@@ -290,16 +293,18 @@ class FlowBuilder:
         step_type = step.get("type")
         if not isinstance(step_type, str) or not step_type.strip():
             raise ViyaConfigError("step must carry a non-empty 'type'")
-        self._steps.append(dict(step))
+        self._steps.append(copy.deepcopy(step))
         return self
 
     def build(self) -> dict[str, Any]:
         """Return the finished flow graph as ``{"steps": [...]}``.
 
-        Returns a fresh copy each call, so the builder can keep being used
-        afterwards and the returned dict can be mutated freely.
+        Returns a **deep copy** each call, so the builder can keep being used
+        afterwards and the returned graph can be mutated freely — including its
+        nested step dicts, mapping lists, and condition branches — without
+        affecting the builder's internal state or any prior/subsequent build.
         """
-        return {"steps": [dict(step) for step in self._steps]}
+        return {"steps": [copy.deepcopy(step) for step in self._steps]}
 
 
 def _branch_steps(branch: FlowBuilder | None, arg_name: str) -> list[dict[str, Any]]:
@@ -310,4 +315,4 @@ def _branch_steps(branch: FlowBuilder | None, arg_name: str) -> list[dict[str, A
         raise ViyaConfigError(
             f"{arg_name} must be a FlowBuilder or None (got {type(branch).__name__})"
         )
-    return [dict(step) for step in branch._steps]
+    return [copy.deepcopy(step) for step in branch._steps]

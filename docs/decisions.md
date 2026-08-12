@@ -287,10 +287,10 @@ decision = client.decisions.create("My Flow", flow)
 
 The three step methods cover the common cases:
 
-- [`model`][viyapy.FlowBuilder.model] references a registered model by id.
-- [`ruleset`][viyapy.FlowBuilder.ruleset] references a business ruleset, with an
-  optional pinned `version_id`/`version_name`.
-- [`condition`][viyapy.FlowBuilder.condition] adds an if/else branch whose
+- [`model`][viyapy.flows.FlowBuilder.model] references a registered model by id.
+- [`ruleset`][viyapy.flows.FlowBuilder.ruleset] references a business ruleset,
+  with an optional pinned `version_id`/`version_name`.
+- [`condition`][viyapy.flows.FlowBuilder.condition] adds an if/else branch whose
   `on_true`/`on_false` arms are themselves `FlowBuilder` instances, so flows nest
   to any depth. Either arm may be omitted.
 
@@ -302,8 +302,9 @@ once; pass a second argument when the names differ.
 The builder emits only the **authorable** subset of each step; the server assigns
 ids, timestamps, and links on create. Step types the builder doesn't model yet
 (custom-object, branch) can be appended verbatim with
-[`add_step`][viyapy.FlowBuilder.add_step]. `build()` returns a fresh copy each
-call, so a builder is reusable. The builder validates eagerly: an empty id or
+[`add_step`][viyapy.flows.FlowBuilder.add_step]. `build()` returns a fresh deep
+copy each call, so a builder is reusable and the returned graph can be mutated
+freely. The builder validates eagerly: an empty id or
 expression, an unknown mapping direction, or a non-`TermMapping` mapping raises
 [`ViyaConfigError`][viyapy.ViyaConfigError] before any request.
 

@@ -236,15 +236,18 @@ def test_condition_rejects_non_builder_branch() -> None:
 # -- FlowBuilder: add_step escape hatch ------------------------------------
 
 
-def test_add_step_appends_a_top_level_copy() -> None:
+def test_add_step_appends_a_deep_copy() -> None:
     raw = {"type": "application/vnd.sas.decision.step.custom.object", "customObject": {"id": "c1"}}
     builder = FlowBuilder().add_step(raw)
     built = builder.build()["steps"][0]
     assert built == raw
-    # A shallow copy is stored: adding/removing top-level keys on the caller's
-    # dict must not leak into the builder (matching build()'s copy semantics).
+    # A deep copy is stored: mutating the caller's dict afterwards — including
+    # nested values — must not leak into the builder's internal state.
     raw["extra"] = "leaked"
-    assert "extra" not in builder.build()["steps"][0]
+    raw["customObject"]["id"] = "mutated"
+    stored = builder.build()["steps"][0]
+    assert "extra" not in stored
+    assert stored["customObject"] == {"id": "c1"}
 
 
 @pytest.mark.parametrize("bad", [None, 42, ["type"], "type"])
@@ -285,6 +288,40 @@ def test_mutating_built_dict_does_not_affect_builder() -> None:
     built = builder.build()
     built["steps"].append({"type": "injected"})
     assert len(builder.build()["steps"]) == 1
+
+
+def test_mutating_nested_step_dict_does_not_affect_builder() -> None:
+    # build() must deep-copy: mutating a nested field of a built step must not
+    # corrupt the builder's internal state for subsequent build() calls.
+    builder = FlowBuilder().model("m-1")
+    built = builder.build()
+    built["steps"][0]["model"]["name"] = "leaked"
+    assert "name" not in builder.build()["steps"][0]["model"]
+
+
+def test_mutating_built_mappings_list_does_not_affect_builder() -> None:
+    builder = FlowBuilder().model("m-1", mappings=[TermMapping.input("X")])
+    built = builder.build()
+    built["steps"][0]["mappings"].append({"extra": "leaked"})
+    # The builder still holds exactly one mapping — the nested list was copied.
+    assert len(builder.build()["steps"][0]["mappings"]) == 1
+
+
+def test_mutating_built_condition_branch_does_not_affect_builder() -> None:
+    builder = FlowBuilder().condition("x > 1", on_true=FlowBuilder().ruleset("r-1"))
+    built = builder.build()
+    built["steps"][0]["onTrue"]["steps"][0]["ruleset"]["id"] = "leaked"
+    assert builder.build()["steps"][0]["onTrue"]["steps"][0]["ruleset"]["id"] == "r-1"
+
+
+def test_two_builds_share_no_nested_objects() -> None:
+    builder = FlowBuilder().model("m-1", mappings=[TermMapping.input("X")])
+    first = builder.build()
+    second = builder.build()
+    # Every nested container is a distinct object between successive builds.
+    assert first["steps"][0] is not second["steps"][0]
+    assert first["steps"][0]["model"] is not second["steps"][0]["model"]
+    assert first["steps"][0]["mappings"] is not second["steps"][0]["mappings"]
 
 
 # -- ordering --------------------------------------------------------------
