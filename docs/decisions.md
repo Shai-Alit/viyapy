@@ -292,7 +292,9 @@ The three step methods cover the common cases:
   with an optional pinned `version_id`/`version_name`.
 - [`condition`][viyapy.flows.FlowBuilder.condition] adds an if/else branch whose
   `on_true`/`on_false` arms are themselves `FlowBuilder` instances, so flows nest
-  to any depth. Either arm may be omitted.
+  to any depth. Either arm may be omitted. A branch arm is captured by reference
+  and resolved when the outer flow is built, so you can keep adding steps to an
+  arm after attaching it — the later steps are still included.
 
 [`TermMapping`][viyapy.TermMapping] wires a step's own terms to the flow's
 decision-level terms. Its `input`, `output`, and `in_out` constructors default the

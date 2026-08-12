@@ -245,6 +245,10 @@ class FlowBuilder:
         branch), and each is an independent :class:`FlowBuilder`, so branches
         nest arbitrarily.
 
+        Each branch builder is captured **by reference** and only serialized when
+        the outer :meth:`build` runs — not here — so you may keep composing a
+        branch *after* attaching it and the later steps are still included.
+
         Args:
             expression: The condition expression. Required, non-empty.
             on_true: Steps to run when the expression is true.
@@ -262,8 +266,11 @@ class FlowBuilder:
         step: dict[str, Any] = {
             "type": STEP_CONDITION,
             "conditionExpression": expression,
-            "onTrue": {"steps": _branch_steps(on_true, "on_true")},
-            "onFalse": {"steps": _branch_steps(on_false, "on_false")},
+            # Store the branch builders by reference; they are resolved to their
+            # {"steps": [...]} shape lazily, at build() time. The type is still
+            # validated eagerly here so a bad branch fails at the call site.
+            "onTrue": _require_branch(on_true, "on_true"),
+            "onFalse": _require_branch(on_false, "on_false"),
         }
         if name is not None:
             step["name"] = require_non_empty_str(name, "name")
@@ -299,20 +306,58 @@ class FlowBuilder:
     def build(self) -> dict[str, Any]:
         """Return the finished flow graph as ``{"steps": [...]}``.
 
-        Returns a **deep copy** each call, so the builder can keep being used
-        afterwards and the returned graph can be mutated freely — including its
-        nested step dicts, mapping lists, and condition branches — without
+        Returns a fresh **deep copy** each call, so the builder can keep being
+        used afterwards and the returned graph can be mutated freely — including
+        its nested step dicts, mapping lists, and condition branches — without
         affecting the builder's internal state or any prior/subsequent build.
+
+        Condition branches are resolved from their :class:`FlowBuilder` at this
+        point (not when :meth:`condition` was called), so steps added to a branch
+        after it was attached are included. A branch that (transitively)
+        references one of its own ancestors — a cycle — raises
+        :class:`ViyaConfigError` here rather than recursing forever.
         """
-        return {"steps": [copy.deepcopy(step) for step in self._steps]}
+        return self._build(frozenset())
+
+    def _build(self, seen: frozenset[int]) -> dict[str, Any]:
+        """Serialize this builder's steps, guarding against branch cycles.
+
+        ``seen`` carries the ids of the builders currently being serialized on the
+        path from the root, so a branch that references an ancestor is caught.
+        """
+        if id(self) in seen:
+            raise ViyaConfigError("condition branch references an ancestor FlowBuilder (cycle)")
+        seen = seen | {id(self)}
+        return {"steps": [_serialize_step(step, seen) for step in self._steps]}
 
 
-def _branch_steps(branch: FlowBuilder | None, arg_name: str) -> list[dict[str, Any]]:
-    """Serialize a condition branch (a nested builder) to its ``steps`` list."""
+def _require_branch(branch: FlowBuilder | None, arg_name: str) -> FlowBuilder:
+    """Validate a condition branch, returning the builder to resolve at build time.
+
+    ``None`` becomes a fresh empty builder (an empty branch). The type is checked
+    eagerly — an invalid branch fails at the :meth:`FlowBuilder.condition` call,
+    not later at build.
+    """
     if branch is None:
-        return []
+        return FlowBuilder()
     if not isinstance(branch, FlowBuilder):
         raise ViyaConfigError(
             f"{arg_name} must be a FlowBuilder or None (got {type(branch).__name__})"
         )
-    return [copy.deepcopy(step) for step in branch._steps]
+    return branch
+
+
+def _serialize_step(step: dict[str, Any], seen: frozenset[int]) -> dict[str, Any]:
+    """Deep-copy a step, resolving any nested :class:`FlowBuilder` branch to its dict."""
+    return {key: _serialize_value(value, seen) for key, value in step.items()}
+
+
+def _serialize_value(value: Any, seen: frozenset[int]) -> Any:
+    """Recursively copy a step value; a :class:`FlowBuilder` resolves to its graph."""
+    if isinstance(value, FlowBuilder):
+        return value._build(seen)
+    if isinstance(value, dict):
+        return {key: _serialize_value(item, seen) for key, item in value.items()}
+    if isinstance(value, list):
+        return [_serialize_value(item, seen) for item in value]
+    return copy.deepcopy(value)

@@ -314,6 +314,46 @@ def test_mutating_built_condition_branch_does_not_affect_builder() -> None:
     assert builder.build()["steps"][0]["onTrue"]["steps"][0]["ruleset"]["id"] == "r-1"
 
 
+# -- FlowBuilder: condition branches resolve at build time ------------------
+
+
+def test_condition_branch_is_resolved_at_build_time_not_attach_time() -> None:
+    # Branches follow the same copy-at-build-time rule as the rest of the API:
+    # steps added to a branch AFTER it is attached must still be included.
+    approve = FlowBuilder()
+    decline = FlowBuilder()
+    flow = FlowBuilder().condition("x > 1", on_true=approve, on_false=decline)
+    approve.ruleset("approve-rs")  # composed after attaching
+    decline.ruleset("decline-rs")
+    step = flow.build()["steps"][0]
+    assert step["onTrue"]["steps"][0]["ruleset"]["id"] == "approve-rs"
+    assert step["onFalse"]["steps"][0]["ruleset"]["id"] == "decline-rs"
+
+
+def test_condition_branch_reflects_latest_state_across_builds() -> None:
+    branch = FlowBuilder().model("m-1")
+    outer = FlowBuilder().condition("x > 1", on_true=branch)
+    assert len(outer.build()["steps"][0]["onTrue"]["steps"]) == 1
+    branch.ruleset("r-1")  # keep composing the branch after the first build
+    assert len(outer.build()["steps"][0]["onTrue"]["steps"]) == 2
+
+
+def test_condition_self_reference_raises_cycle_at_build() -> None:
+    builder = FlowBuilder()
+    builder.condition("x > 1", on_true=builder)  # a direct cycle
+    with pytest.raises(ViyaConfigError):
+        builder.build()
+
+
+def test_condition_indirect_cycle_raises_at_build() -> None:
+    a = FlowBuilder()
+    b = FlowBuilder()
+    a.condition("x > 1", on_true=b)
+    b.condition("y > 2", on_true=a)  # a -> b -> a
+    with pytest.raises(ViyaConfigError):
+        a.build()
+
+
 def test_two_builds_share_no_nested_objects() -> None:
     builder = FlowBuilder().model("m-1", mappings=[TermMapping.input("X")])
     first = builder.build()
