@@ -90,8 +90,8 @@ endpoints:
     # Create sends the authorable subset (name + optional description/flow/
     # signature/properties) under the decision media type for BOTH Content-Type
     # and Accept; the server assigns id/revision numbers and returns the full
-    # representation. The flow graph is passed through raw (phase 5.4a — a typed
-    # builder is deferred to 5.4b).
+    # representation. The flow graph may be passed as a raw dict or composed with
+    # the typed FlowBuilder (phase 5.4b); both serialize to the same body.
     content_type: application/vnd.sas.decision+json
     request_fields: [name, description, flow]
     accept: application/vnd.sas.decision+json

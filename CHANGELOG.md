@@ -7,8 +7,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- `parse_execution` no longer raises `TypeError` when a MAS output entry carries
+  a non-string `name` (e.g. a list or number). Such a name can't address an
+  output, so the entry is now skipped — matching how nameless entries are already
+  handled — instead of being used as an (unhashable) dict key. Surfaced by a
+  Hypothesis property test.
+
 ### Added
 
+- A typed flow builder (`FlowBuilder`, `TermMapping`), exported from the package
+  root, for composing a decision flow's `flow` graph in Python instead of
+  hand-writing the SAS step JSON. `FlowBuilder` chains fluently — `.model(id,
+  mappings=..., name=...)`, `.ruleset(id, mappings=..., version_id=...)`, and
+  `.condition(expression, on_true=..., on_false=...)` (if/else branches are
+  themselves `FlowBuilder` instances, so graphs nest to any depth) — and
+  `.build()` returns the `{"steps": [...]}` dict. `TermMapping.input`/`output`/
+  `in_out` construct the step-to-decision term wiring, defaulting the step term
+  to the decision term for the common matching-name case. Step types the builder
+  doesn't model yet (custom-object, branch) can be appended verbatim with
+  `.add_step(dict)`. `client.decisions.create` and `update` now accept a
+  `FlowBuilder` directly (calling `.build()` for you); a raw dict remains
+  accepted. The builder is client-side and generation-agnostic; it emits only the
+  authorable subset of each step (the server assigns ids, timestamps, and links),
+  serializing to the flow-step shapes confirmed against a live Viya 4 instance.
 - Authoring decision flows on `client.decisions`: `create`, `update`, and
   `delete`. `create(name, flow, ...)` posts a new flow
   (`POST /decisions/flows`) — for now the `flow` graph is passed through as a
@@ -25,7 +48,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `application/vnd.sas.decision+json` media type for the request and response.
   Wire shapes were confirmed against a live Viya 4 instance; pinned in both
   generation contracts and covered by unit and opt-in (CRUD-gated) live
-  integration tests. A typed flow-graph builder is deferred to a later phase.
+  integration tests. The `flow` graph may be passed as a raw dict or composed
+  with the typed `FlowBuilder` (see above).
 - Reading a decision flow's external artifacts on `client.decisions`.
   `external_artifacts(flow_id)` returns the resources a flow depends on outside
   the flow itself — most commonly the analytic store backing a model step — for

@@ -31,6 +31,7 @@ from .exceptions import (
     ViyaTimeoutError,
     ViyaValidationError,
 )
+from .flows import FlowBuilder, TermMapping
 from .models import (
     CompileJob,
     Decision,
@@ -65,11 +66,13 @@ __all__ = [
     "DecisionSummary",
     "ExecutionResult",
     "ExternalArtifact",
+    "FlowBuilder",
     "MasModule",
     "ModelStep",
     "ModuleSource",
     "Revision",
     "StepSignature",
+    "TermMapping",
     "TokenProvider",
     "ValidationResult",
     "Variable",

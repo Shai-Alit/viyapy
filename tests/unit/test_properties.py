@@ -67,16 +67,22 @@ def test_parse_execution_preserves_outputs(outputs: list[dict[str, Any]]) -> Non
         st.one_of(
             st.fixed_dictionaries({"name": st.text(), "value": _json_values}),
             st.dictionaries(st.text(), _json_values),  # may lack "name"
+            # a "name" whose value is a non-string (here unhashable) — must be
+            # skipped, not used as a dict key (regression: unhashable type 'list').
+            st.fixed_dictionaries({"name": st.lists(st.integers()), "value": _json_values}),
             st.text(),  # non-mapping junk
             st.integers(),  # non-mapping junk
         )
     )
 )
+@example(outputs=[{"name": []}])  # the exact Hypothesis-found unhashable-key case
 def test_parse_execution_skips_malformed_without_raising(outputs: list[Any]) -> None:
     result = Viya4Dialect().parse_execution("m", "execute", {"outputs": outputs})
+    # Only mapping items with a *string* name are addressable; everything else
+    # (missing/non-string name, non-mapping junk) is skipped rather than raising.
     expected = {
         item["name"]: item.get("value")
         for item in outputs
-        if isinstance(item, Mapping) and "name" in item
+        if isinstance(item, Mapping) and isinstance(item.get("name"), str)
     }
     assert result.outputs == expected

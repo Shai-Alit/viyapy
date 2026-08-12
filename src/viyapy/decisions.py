@@ -11,7 +11,21 @@ from ._revisions import RevisionsMixin
 from ._validation import require_identifier, require_non_empty_str, require_positive_int
 from .dialects.base import Dialect
 from .exceptions import ViyaConfigError, ViyaResponseError
+from .flows import FlowBuilder
 from .models import Decision, DecisionSummary, ExternalArtifact, ModelStep
+
+
+def _coerce_flow(flow: Mapping[str, Any] | FlowBuilder) -> Mapping[str, Any]:
+    """Accept a raw flow mapping or a :class:`~viyapy.flows.FlowBuilder`.
+
+    A builder is materialized via its ``build()``; a mapping is returned as-is.
+    Anything else fails fast with a :class:`~viyapy.exceptions.ViyaConfigError`.
+    """
+    if isinstance(flow, FlowBuilder):
+        return flow.build()
+    if not isinstance(flow, Mapping):
+        raise ViyaConfigError("flow must be a mapping or a FlowBuilder (e.g. {'steps': []})")
+    return flow
 
 
 class DecisionsAPI(RevisionsMixin[Decision]):
@@ -101,7 +115,7 @@ class DecisionsAPI(RevisionsMixin[Decision]):
     def create(
         self,
         name: str,
-        flow: Mapping[str, Any],
+        flow: Mapping[str, Any] | FlowBuilder,
         *,
         description: str | None = None,
         signature: Any | None = None,
@@ -115,15 +129,15 @@ class DecisionsAPI(RevisionsMixin[Decision]):
         revision numbers (``majorRevision``/``minorRevision``), and audit fields
         the server assigns.
 
-        For phase 5.4a the flow graph is passed through as a **raw dict** (the
-        ``flow`` argument) rather than assembled from a typed builder; an empty
-        ``{"steps": []}`` is a valid flow. ``signature`` and ``properties`` are
-        likewise forwarded verbatim when given.
+        The flow graph may be given either as a raw mapping (an empty
+        ``{"steps": []}`` is valid) or as a typed
+        :class:`~viyapy.flows.FlowBuilder`, which is materialized for you.
+        ``signature`` and ``properties`` are forwarded verbatim when given.
 
         Args:
             name: The flow's display name. Must be a non-empty string.
-            flow: The flow graph as a mapping (e.g. ``{"steps": [...]}``), sent
-                verbatim. May contain an empty ``steps`` list.
+            flow: The flow graph — a mapping (e.g. ``{"steps": [...]}``) sent
+                verbatim, or a :class:`~viyapy.flows.FlowBuilder`. May be empty.
             description: Optional human-readable description.
             signature: Optional decision signature (variables), forwarded as-is.
             properties: Optional decision properties, forwarded as-is.
@@ -133,19 +147,17 @@ class DecisionsAPI(RevisionsMixin[Decision]):
             The parsed :class:`Decision` for the created flow.
 
         Raises:
-            ViyaConfigError: ``name`` is empty or not a string, or ``flow`` is not
-                a mapping.
+            ViyaConfigError: ``name`` is empty or not a string, or ``flow`` is
+                neither a mapping nor a :class:`~viyapy.flows.FlowBuilder`.
             ViyaResponseError: The response carried no usable decision id.
             ViyaAPIError: The server rejected the definition.
             ViyaError: On any other failure.
         """
         name = require_non_empty_str(name, "name")
-        if not isinstance(flow, Mapping):
-            raise ViyaConfigError("flow must be a mapping (e.g. {'steps': []})")
         body = self._dialect.build_decision_definition(
             name,
             description=description,
-            flow=flow,
+            flow=_coerce_flow(flow),
             signature=signature,
             properties=properties,
         )
@@ -171,7 +183,7 @@ class DecisionsAPI(RevisionsMixin[Decision]):
         *,
         name: str | None = None,
         description: str | None = None,
-        flow: Mapping[str, Any] | None = None,
+        flow: Mapping[str, Any] | FlowBuilder | None = None,
         signature: Any | None = None,
         properties: Any | None = None,
         timeout: float | tuple[float, float] | None = None,
@@ -193,7 +205,8 @@ class DecisionsAPI(RevisionsMixin[Decision]):
             decision_id: The id of the flow to update. Must already exist.
             name: New display name, if changing. Must be non-empty when given.
             description: New description, if changing.
-            flow: New flow graph (raw mapping), if changing.
+            flow: New flow graph, if changing — a raw mapping or a
+                :class:`~viyapy.flows.FlowBuilder`.
             signature: New decision signature, if changing.
             properties: New decision properties, if changing.
             timeout: Optional per-call timeout override.
@@ -218,8 +231,7 @@ class DecisionsAPI(RevisionsMixin[Decision]):
         # trip, so a bad value fails at the call site rather than after the GET.
         if name is not None:
             name = require_non_empty_str(name, "name")
-        if flow is not None and not isinstance(flow, Mapping):
-            raise ViyaConfigError("flow must be a mapping (e.g. {'steps': []})")
+        flow_body = _coerce_flow(flow) if flow is not None else None
 
         # Fetch the current representation for its ETag (the concurrency guard)
         # and to overlay onto — unspecified fields are preserved, not dropped.
@@ -253,7 +265,7 @@ class DecisionsAPI(RevisionsMixin[Decision]):
         body = self._dialect.build_decision_definition(
             merged_name,
             description=description if description is not None else current.get("description"),
-            flow=flow if flow is not None else current.get("flow"),
+            flow=flow_body if flow_body is not None else current.get("flow"),
             signature=signature if signature is not None else current.get("signature"),
             properties=properties if properties is not None else current.get("properties"),
         )

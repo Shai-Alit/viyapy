@@ -9,7 +9,15 @@ from typing import Any
 import pytest
 import responses
 
-from viyapy import Decision, DecisionSummary, ExternalArtifact, Revision, ViyaClient
+from viyapy import (
+    Decision,
+    DecisionSummary,
+    ExternalArtifact,
+    FlowBuilder,
+    Revision,
+    TermMapping,
+    ViyaClient,
+)
 from viyapy.exceptions import (
     ViyaAPIError,
     ViyaConfigError,
@@ -620,6 +628,17 @@ def test_create_non_mapping_flow_fails_fast(bad: Any) -> None:
 
 
 @responses.activate
+def test_create_accepts_a_flow_builder() -> None:
+    # A FlowBuilder may be passed straight through — create() calls build() for us.
+    responses.add(responses.POST, _FLOWS_URL, json={"id": "x", "name": "n"}, status=201)
+    flow = FlowBuilder().model("m-1", mappings=[TermMapping.input("DEBTINC")])
+    make_client().decisions.create("n", flow)
+    sent = json.loads(responses.calls[0].request.body)
+    assert sent["flow"] == flow.build()
+    assert sent["flow"]["steps"][0]["model"] == {"id": "m-1"}
+
+
+@responses.activate
 def test_create_response_without_id_raises_response_error() -> None:
     responses.add(responses.POST, _FLOWS_URL, json={"name": "no id"}, status=201)
     with pytest.raises(ViyaResponseError):
@@ -683,6 +702,19 @@ def test_update_new_flow_replaces_current_flow() -> None:
 
     sent = json.loads(responses.calls[1].request.body)
     assert sent["flow"] == {"steps": [{"type": "new"}]}
+
+
+@responses.activate
+def test_update_accepts_a_flow_builder() -> None:
+    _add_flow_get_for_etag(body={"id": "d1", "name": "Old Name", "flow": {"steps": []}})
+    responses.add(responses.PUT, _UPDATE_URL, json={"id": "d1"}, status=200)
+
+    flow = FlowBuilder().ruleset("r-1")
+    make_client().decisions.update("d1", flow=flow)
+
+    sent = json.loads(responses.calls[1].request.body)
+    assert sent["flow"] == flow.build()
+    assert sent["flow"]["steps"][0]["ruleset"] == {"id": "r-1"}
 
 
 @responses.activate

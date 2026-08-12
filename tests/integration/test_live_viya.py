@@ -24,6 +24,7 @@ from viyapy import (
     DecisionSummary,
     ExecutionResult,
     ExternalArtifact,
+    FlowBuilder,
     MasModule,
     ModuleSource,
     Revision,
@@ -269,7 +270,13 @@ def _check_decision_crud(client: ViyaClient) -> None:
     name = f"viyapy_crud_{os.getpid()}"
     created_id: str | None = None
     try:
-        decision = client.decisions.create(name, {"steps": []}, description="viyapy live CRUD")
+        # Author the flow with the typed builder rather than a raw dict, so the
+        # FlowBuilder -> create() path is exercised end to end. An empty builder
+        # serializes to the confirmed-valid {"steps": []} body — avoiding
+        # server-side validation of steps that reference synthetic model/ruleset
+        # ids that don't exist on this deployment.
+        flow = FlowBuilder()
+        decision = client.decisions.create(name, flow, description="viyapy live CRUD")
         assert isinstance(decision, Decision)
         created_id = decision.id
         assert created_id

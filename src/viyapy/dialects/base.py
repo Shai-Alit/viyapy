@@ -649,9 +649,9 @@ class Dialect:
         """
         state = raw.get("executionState")
         outputs = {
-            item["name"]: self._output_value(item, raw)
+            name: self._output_value(item, raw)
             for item in self._raw_outputs(raw, state)
-            if isinstance(item, Mapping) and "name" in item
+            if isinstance(item, Mapping) and isinstance(name := item.get("name"), str)
         }
         metadata = raw.get("metadata")
         metadata = metadata if isinstance(metadata, Mapping) else {}

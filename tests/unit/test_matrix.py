@@ -7,12 +7,13 @@ exercised on every run, from one parametrization.
 
 from __future__ import annotations
 
+import json
 from collections.abc import Callable
 from typing import Any
 
 import responses
 
-from viyapy import ViyaClient
+from viyapy import FlowBuilder, TermMapping, ViyaClient
 
 BASE = "https://viya.example.com"
 TOKEN = "test-token"
@@ -139,6 +140,25 @@ def test_decision_create_across_generations(
     req = responses.calls[0].request
     assert req.headers["Content-Type"] == "application/vnd.sas.decision+json"
     assert req.headers["Accept"] == "application/vnd.sas.decision+json"
+
+
+@responses.activate
+def test_decision_create_from_builder_across_generations(
+    generation: str,
+    version_for: Callable[[str], str],
+    load_fixture: Callable[[str, str], Any],
+) -> None:
+    raw = load_fixture(generation, "decision_created.json")
+    responses.add(responses.POST, f"{BASE}/decisions/flows", json=raw, status=201)
+
+    client = ViyaClient(BASE, TOKEN, viya_version=version_for(generation), max_retries=0)
+
+    # The typed builder is generation-agnostic: the same flow body is POSTed for
+    # both generations (the create body itself carries no version-specific shape).
+    flow = FlowBuilder().model("m-1", mappings=[TermMapping.input("DEBTINC")])
+    client.decisions.create("Throwaway Flow", flow)
+    sent = json.loads(responses.calls[0].request.body)
+    assert sent["flow"] == flow.build()
 
 
 @responses.activate
