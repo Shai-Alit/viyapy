@@ -225,9 +225,11 @@ decision.major_revision  # 1
 decision.minor_revision  # 0
 ```
 
-The flow graph is passed through as a **raw dict** — an empty `{"steps": []}` is a
-valid starting flow — and the optional `signature` and `properties` are forwarded
-verbatim when given. (A typed flow-graph builder is planned for a later release.)
+The flow graph can be passed through as a **raw dict** — an empty `{"steps": []}`
+is a valid starting flow — and the optional `signature` and `properties` are
+forwarded verbatim when given. Rather than hand-write the step JSON, though, you
+can compose the graph with the [typed builder](#composing-flows-with-the-typed-builder)
+described below.
 
 [`update`][viyapy.decisions.DecisionsAPI.update] changes a flow's authorable
 fields. Pass only what you want to change; unspecified fields are preserved:
@@ -250,6 +252,60 @@ overwriting the concurrent change — so retry against the fresh state.
 ```python
 client.decisions.delete("my-decision-id")
 ```
+
+## Composing flows with the typed builder
+
+A decision flow's graph is a `{"steps": [...]}` mapping in which every step is a
+small dict tagged by a SAS media-type string. Writing that by hand is easy to get
+subtly wrong, so [`FlowBuilder`][viyapy.FlowBuilder] assembles it from typed,
+validated calls. Each method appends one step and returns the builder, so calls
+chain, and [`create`][viyapy.decisions.DecisionsAPI.create] and
+[`update`][viyapy.decisions.DecisionsAPI.update] accept a `FlowBuilder` directly
+(they call `build()` for you):
+
+```python
+from viyapy import FlowBuilder, TermMapping
+
+flow = (
+    FlowBuilder()
+    .model(
+        "9fadffa1-...",                          # a model's id
+        mappings=[
+            TermMapping.input("DEBTINC"),
+            TermMapping.output("EM_CLASSIFICATION"),
+        ],
+    )
+    .condition(
+        "P_BAD1 < .2",                           # a SAS boolean expression
+        on_true=FlowBuilder().ruleset("approve-ruleset-id"),
+        on_false=FlowBuilder().ruleset("decline-ruleset-id"),
+    )
+)
+
+decision = client.decisions.create("My Flow", flow)
+```
+
+The three step methods cover the common cases:
+
+- [`model`][viyapy.FlowBuilder.model] references a registered model by id.
+- [`ruleset`][viyapy.FlowBuilder.ruleset] references a business ruleset, with an
+  optional pinned `version_id`/`version_name`.
+- [`condition`][viyapy.FlowBuilder.condition] adds an if/else branch whose
+  `on_true`/`on_false` arms are themselves `FlowBuilder` instances, so flows nest
+  to any depth. Either arm may be omitted.
+
+[`TermMapping`][viyapy.TermMapping] wires a step's own terms to the flow's
+decision-level terms. Its `input`, `output`, and `in_out` constructors default the
+step term to the decision term — the common matching-name case — so you name it
+once; pass a second argument when the names differ.
+
+The builder emits only the **authorable** subset of each step; the server assigns
+ids, timestamps, and links on create. Step types the builder doesn't model yet
+(custom-object, branch) can be appended verbatim with
+[`add_step`][viyapy.FlowBuilder.add_step]. `build()` returns a fresh copy each
+call, so a builder is reusable. The builder validates eagerly: an empty id or
+expression, an unknown mapping direction, or a non-`TermMapping` mapping raises
+[`ViyaConfigError`][viyapy.ViyaConfigError] before any request.
 
 ## Errors
 

@@ -14,6 +14,10 @@ Generated from the source docstrings — this reference cannot drift from the co
 
 ::: viyapy.mas.MASClient
 
+## Flow builder
+
+::: viyapy.flows
+
 ## Models
 
 ::: viyapy.models
