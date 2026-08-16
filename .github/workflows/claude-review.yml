@@ -67,7 +67,7 @@ jobs:
       # lets the OIDC login succeed and still yields a usable token.
       - name: Authenticate to Azure
         if: steps.guard.outputs.skip != 'true'
-        uses: azure/login@v2
+        uses: azure/login@v3
         with:
           client-id: ${{ secrets.AZURE_CLIENT_ID }}
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
