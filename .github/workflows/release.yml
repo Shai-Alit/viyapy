@@ -55,9 +55,6 @@ jobs:
           /tmp/smoke/bin/python -c "import viyapy; print('import OK:', viyapy.__version__)"
 
       - name: Publish to PyPI (Trusted Publishing)
-        # Pinned to a tag because the GitHub API was unavailable to resolve the
-        # commit SHA at authoring time; Dependabot (github-actions) will pin it
-        # to a SHA on its next run.
-        uses: pypa/gh-action-pypi-publish@v1.14.3
+        uses: pypa/gh-action-pypi-publish@7245906fb61fa33a13554f9d5fb856fe61758086 # v1.14.3
         with:
           print-hash: true
